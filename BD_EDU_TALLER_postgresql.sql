@@ -654,9 +654,10 @@ FOR EACH ROW
 EXECUTE FUNCTION fn_actualizar_fecha_modificacion();
 
 -- ============================================================
--- FUNCION: VALIDAR CANTIDAD MAXIMA DE SESIONES
--- Sesion: maximo 3
--- Seminario: maximo 1
+-- MIGRACION: permitir hasta 6 sesiones en talleres tipo "Sesión"
+-- (antes el trigger original limitaba a 3). Seminario se mantiene en 1.
+-- Seguro de correr en una base de datos que ya tiene datos: solo
+-- reemplaza la funcion, no toca tablas ni filas existentes.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION fn_validar_cantidad_sesiones()
@@ -682,9 +683,9 @@ BEGIN
     FROM Sesion
     WHERE id_taller = v_taller;
 
-    IF LOWER(v_tipo) IN ('sesion', 'sesión') AND v_cantidad > 3 THEN
+    IF LOWER(v_tipo) IN ('sesion', 'sesión') AND v_cantidad > 6 THEN
         RAISE EXCEPTION
-            'Un taller de tipo Sesión no puede tener más de 3 sesiones.';
+            'Un taller de tipo Sesión no puede tener más de 6 sesiones.';
     ELSIF LOWER(v_tipo) = 'seminario' AND v_cantidad > 1 THEN
         RAISE EXCEPTION
             'Un Seminario solo puede tener 1 sesión.';

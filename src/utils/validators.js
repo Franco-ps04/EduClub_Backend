@@ -19,12 +19,4 @@ function estadoKey(value) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
-function conteoPalabras(texto) {
-  return String(texto ?? '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .length;
-}
-
-module.exports = { soloDigitos, validarEmail, validarPassword, estadoKey, conteoPalabras };
+module.exports = { soloDigitos, validarEmail, validarPassword, estadoKey };

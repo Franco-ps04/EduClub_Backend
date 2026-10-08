@@ -1,43 +1,39 @@
 const mensajeDAO = require('../dao/MensajeDAO');
 const { estadoKey } = require('../utils/validators');
 
-// GET /api/mensajes/destinatarios
+// GET /api/mensajes/destinatarios  (alumno)
 async function destinatarios(req, res) {
   try {
-    const data = await mensajeDAO.destinatariosParaVoluntario();
-    res.json(data);
+    res.json(await mensajeDAO.destinatariosParaAlumno());
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
 
-// GET /api/mensajes/mis
+// GET /api/mensajes/mis  (alumno)
 async function misMensajes(req, res) {
   try {
     const msgs = await mensajeDAO.misMensajes(req.usuario.id);
-
     const data = [];
     for (const msg of msgs) {
-      const historial = await mensajeDAO.getHistorial(msg.id_mensaje);
-      data.push({ ...msg, historial });
+      data.push({ ...msg, historial: await mensajeDAO.getHistorial(msg.id_mensaje) });
     }
-
     res.json(data);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
 
-// POST /api/mensajes
+// POST /api/mensajes  (alumno)
 async function crear(req, res) {
-  const { idUsuarioDestino, idDestinatario, asunto, mensaje, idEvento } = req.body;
+  const { idUsuarioDestino, idDestinatario, asunto, mensaje, idTaller } = req.body;
 
   const destino = Number(idUsuarioDestino || idDestinatario);
   const asuntoLimpio = String(asunto ?? '').trim();
   const mensajeLimpio = String(mensaje ?? '').trim();
-  const idEvt = idEvento === undefined || idEvento === null || String(idEvento).trim() === ''
+  const idTallerNum = idTaller === undefined || idTaller === null || String(idTaller).trim() === ''
     ? null
-    : Number(idEvento);
+    : Number(idTaller);
 
   if (!destino || !asuntoLimpio || !mensajeLimpio) {
     return res.status(400).json({ message: 'Faltan campos obligatorios' });
@@ -52,32 +48,22 @@ async function crear(req, res) {
   try {
     const destinoOk = await mensajeDAO.findDestinoValido(destino);
     if (!destinoOk) {
-      return res.status(400).json({ message: 'El destinatario debe ser un administrador u organizador activo' });
+      return res.status(400).json({ message: 'El destinatario debe ser un docente o administrador activo' });
     }
 
-    if (idEvt) {
-      const evento = await mensajeDAO.findEventoParaMensaje(idEvt);
-      if (!evento) {
-        return res.status(404).json({ message: 'El evento no existe' });
-      }
+    if (idTallerNum) {
+      const taller = await mensajeDAO.findTallerParaMensaje(idTallerNum);
+      if (!taller) return res.status(404).json({ message: 'El taller no existe' });
 
-      const estado = estadoKey(evento.estado);
+      const estado = estadoKey(taller.estado);
       if (estado === 'finalizado' || estado === 'cancelado') {
-        return res.status(400).json({ message: 'Solo puedes enviar mensajes mientras el evento esté activo' });
-      }
-
-      if (destinoOk.rol === 'organizador' &&
-        Number(destinoOk.id_usuario) !== Number(evento.id_usuario_organizador)) {
-        return res.status(400).json({ message: 'El organizador seleccionado no corresponde al evento' });
+        return res.status(400).json({ message: 'Solo puedes enviar mensajes mientras el taller esté activo' });
       }
     }
 
     const idMensaje = await mensajeDAO.crear({
-      asunto: asuntoLimpio,
-      mensaje: mensajeLimpio,
-      idVoluntario: req.usuario.id,
-      idDestino: destino,
-      idEvento: idEvt
+      asunto: asuntoLimpio, mensaje: mensajeLimpio,
+      idAlumno: req.usuario.id, idDestino: destino, idTaller: idTallerNum
     });
 
     res.status(201).json({ ok: true, id: idMensaje });
@@ -86,85 +72,71 @@ async function crear(req, res) {
   }
 }
 
-// POST /api/mensajes/:id/seguimiento
+// POST /api/mensajes/:id/seguimiento  (alumno)
 async function seguimiento(req, res) {
   const { texto } = req.body;
   if (!texto || !texto.trim()) {
     return res.status(400).json({ message: 'El texto no puede estar vacío' });
   }
-
   try {
-    const check = await mensajeDAO.findByIdYVoluntario(req.params.id, req.usuario.id);
-    if (!check) {
-      return res.status(404).json({ message: 'Mensaje no encontrado' });
-    }
+    const check = await mensajeDAO.findByIdYAlumno(req.params.id, req.usuario.id);
+    if (!check) return res.status(404).json({ message: 'Mensaje no encontrado' });
 
     await mensajeDAO.crearRespuesta(req.params.id, texto.trim(), req.usuario.id);
-
     res.status(201).json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
 
-// PATCH /api/mensajes/:id/leido
-async function marcarLeidoVoluntario(req, res) {
+// PATCH /api/mensajes/:id/leido  (alumno)
+async function marcarLeidoAlumno(req, res) {
   try {
-    await mensajeDAO.marcarLeidoPorVoluntario(req.params.id, req.usuario.id);
+    await mensajeDAO.marcarLeidoPorAlumno(req.params.id, req.usuario.id);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
 
-// GET /api/mensajes/panel
+// GET /api/mensajes/panel  (docente/administrador — solo lo dirigido a él)
 async function panel(req, res) {
   try {
     const msgs = await mensajeDAO.panelDestinatario(req.usuario.id);
-
     const data = [];
     for (const msg of msgs) {
-      const historial = await mensajeDAO.getHistorial(msg.id_mensaje);
-      data.push({ ...msg, historial });
+      data.push({ ...msg, historial: await mensajeDAO.getHistorial(msg.id_mensaje) });
     }
-
     res.json(data);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
 
-// PATCH /api/mensajes/:id/marcar-leido
+// PATCH /api/mensajes/:id/marcar-leido  (docente/administrador)
 async function marcarLeidoAdmin(req, res) {
   try {
     const check = await mensajeDAO.findByIdYDestino(req.params.id, req.usuario.id);
-    if (!check) {
-      return res.status(404).json({ message: 'Mensaje no encontrado' });
-    }
+    if (!check) return res.status(404).json({ message: 'Mensaje no encontrado' });
 
     await mensajeDAO.marcarLeido(req.params.id);
-
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
 
-// POST /api/mensajes/:id/responder
+// POST /api/mensajes/:id/responder  (docente/administrador)
 async function responder(req, res) {
   const { texto } = req.body;
   if (!texto || !texto.trim()) {
     return res.status(400).json({ message: 'La respuesta no puede estar vacía' });
   }
-
   try {
     const check = await mensajeDAO.findByIdYDestino(req.params.id, req.usuario.id);
-    if (!check) {
-      return res.status(404).json({ message: 'Mensaje no encontrado' });
-    }
+    if (!check) return res.status(404).json({ message: 'Mensaje no encontrado' });
 
     await mensajeDAO.crearRespuesta(req.params.id, texto.trim(), req.usuario.id);
-
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -172,12 +144,6 @@ async function responder(req, res) {
 }
 
 module.exports = {
-  destinatarios,
-  misMensajes,
-  crear,
-  seguimiento,
-  marcarLeidoVoluntario,
-  panel,
-  marcarLeidoAdmin,
-  responder
+  destinatarios, misMensajes, crear, seguimiento, marcarLeidoAlumno,
+  panel, marcarLeidoAdmin, responder
 };

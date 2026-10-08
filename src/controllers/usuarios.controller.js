@@ -1,46 +1,12 @@
+const bcrypt = require('bcryptjs');
 const usuarioDAO = require('../dao/UsuarioDAO');
-const organizadorDAO = require('../dao/OrganizadorDAO');
-const eventoDAO = require('../dao/EventoDAO');
 const inscripcionDAO = require('../dao/InscripcionDAO');
-const asistenciaDAO = require('../dao/AsistenciaDAO');
-const mensajeDAO = require('../dao/MensajeDAO');
-const notificacionDAO = require('../dao/NotificacionDAO');
+const { soloDigitos, validarEmail, validarPassword } = require('../utils/validators');
 const { generarExcelUsuarios, generarPdfUsuarios } = require('../utils/exportUsuarios');
 
-// Limpia los datos afectados al suspender una cuenta:
-//  - voluntario: libera (elimina) sus inscripciones a eventos aún no
-//    finalizados/cancelados, ajustando el contador de inscritos. El
-//    historial de eventos ya finalizados se conserva intacto.
-//  - organizador/admin: elimina por completo los eventos que aún no
-//    empezaron (y sus mensajes, notificaciones, asistencias e
-//    inscripciones asociadas), ya que sin el organizador esos eventos no
-//    pueden llevarse a cabo.
-async function limpiarDatosUsuarioSuspendido(idUsuario, rol) {
-  const normalizado = String(rol ?? '').trim().toLowerCase();
+const ROLES_VALIDOS = ['alumno', 'docente', 'administrador'];
 
-  if (normalizado === 'voluntario') {
-    await inscripcionDAO.eliminarActivasPorVoluntarioConAjusteInscritos(idUsuario);
-    return;
-  }
-
-  if (normalizado === 'organizador' || normalizado === 'admin') {
-    const org = await organizadorDAO.findByUsuarioId(idUsuario);
-    if (!org) return;
-
-    const eventos = await eventoDAO.findActivosPorOrganizador(org.id_organizador);
-
-    for (const idEvento of eventos) {
-      await mensajeDAO.eliminarPorEvento(idEvento);
-      await notificacionDAO.eliminarPorEvento(idEvento);
-      await asistenciaDAO.eliminarPorEvento(idEvento);
-      await inscripcionDAO.eliminarPorEvento(idEvento);
-      await eventoDAO.eliminarFisico(idEvento);
-    }
-  }
-}
-
-// GET /api/usuarios
-// Query params: ?rol=voluntario&buscar=juan
+// GET /api/usuarios?rol=&buscar=
 async function listar(req, res) {
   try {
     const data = await usuarioDAO.listar({ rol: req.query.rol, buscar: req.query.buscar });
@@ -50,145 +16,108 @@ async function listar(req, res) {
   }
 }
 
-// GET /api/usuarios/destinatarios-activos
-async function destinatariosActivos(req, res) {
-  try {
-    const data = await usuarioDAO.findDestinatariosActivos();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-}
-
 // GET /api/usuarios/:id
 async function obtener(req, res) {
   try {
-    const usuario = await usuarioDAO.findConOrganizacion(req.params.id);
-    if (!usuario)
-      return res.status(404).json({ message: 'Usuario no encontrado' });
+    const usuario = await usuarioDAO.findConDetalle(req.params.id);
+    if (!usuario) return res.status(404).json({ message: 'Usuario no encontrado' });
     res.json(usuario);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
 
+// POST /api/usuarios  ("+ Nuevo usuario" — SOLO crea Docente)
+// Body: { nombres, email, password, telefono, institucion }
+async function crearDocente(req, res) {
+  const nombres = String(req.body.nombres ?? '').trim();
+  const email = String(req.body.email ?? '').trim().toLowerCase();
+  const password = String(req.body.password ?? '');
+  const telefono = soloDigitos(req.body.telefono);
+  const institucion = String(req.body.institucion ?? '').trim();
+
+  if (nombres.length < 3) return res.status(400).json({ message: 'El nombre debe tener al menos 3 caracteres' });
+  if (!validarEmail(email)) return res.status(400).json({ message: 'Ingresa un correo válido' });
+  if (!validarPassword(password)) {
+    return res.status(400).json({ message: 'La contraseña debe tener al menos 8 caracteres, una letra y un número' });
+  }
+  if (telefono.length !== 9) return res.status(400).json({ message: 'El teléfono debe tener 9 dígitos' });
+  if (institucion.length < 3) return res.status(400).json({ message: 'La institución es obligatoria' });
+
+  try {
+    const existe = await usuarioDAO.findByEmail(email);
+    if (existe) return res.status(409).json({ message: 'El correo ya está registrado' });
+
+    const hash = await bcrypt.hash(password, 10);
+    const idUsuario = await usuarioDAO.crearUsuario({ nombres, email, hash, telefono, rol: 'docente' });
+    await usuarioDAO.crearDocente(idUsuario, institucion);
+
+    const usuario = await usuarioDAO.findConDetalle(idUsuario);
+    res.status(201).json(usuario);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+
 // PUT /api/usuarios/:id
-// Body: { nombre, email, telefono, rol, nombre_organizacion }
+// Body: { nombres, email, telefono, rol, institucion }
 async function actualizar(req, res) {
-  const { nombre, email, telefono, rol, nombre_organizacion } = req.body;
-  if (!nombre || !email || !telefono || !rol)
-    return res.status(400).json({ message: 'Faltan campos obligatorios' });
+  const nombres = String(req.body.nombres ?? '').trim();
+  const email = String(req.body.email ?? '').trim().toLowerCase();
+  const telefono = soloDigitos(req.body.telefono);
+  const rol = String(req.body.rol ?? '').trim();
+  const institucion = String(req.body.institucion ?? '').trim();
 
-  if (rol === 'organizador' && !String(nombre_organizacion ?? '').trim()) {
-    return res.status(400).json({ message: 'La organización es obligatoria para un organizador' });
+  if (nombres.length < 3) return res.status(400).json({ message: 'El nombre debe tener al menos 3 caracteres' });
+  if (!validarEmail(email)) return res.status(400).json({ message: 'Ingresa un correo válido' });
+  if (telefono.length !== 9) return res.status(400).json({ message: 'El teléfono debe tener 9 dígitos' });
+  if (!ROLES_VALIDOS.includes(rol)) return res.status(400).json({ message: 'Rol inválido' });
+  if (rol === 'docente' && institucion.length < 3) {
+    return res.status(400).json({ message: 'La institución es obligatoria para un docente' });
   }
 
-  const rolesValidos = ['voluntario', 'admin', 'organizador'];
-  if (!rolesValidos.includes(rol))
-    return res.status(400).json({ message: 'Rol inválido' });
-
-  const idObjetivo = Number(req.params.id);
-  const esPropiaCuenta = idObjetivo === req.usuario.id;
-
   try {
-    const usuarioObjetivo = await usuarioDAO.findEstadoYRolById(idObjetivo);
-    if (!usuarioObjetivo)
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-
-    const rolAnterior = usuarioObjetivo.rol;
-
-    // Puedes editar tu propio nombre/correo/teléfono desde aquí, pero NO tu
-    // propio rol: si te quitas el rol de admin y eras el único, el sistema
-    // se queda sin nadie que administre.
-    if (esPropiaCuenta && rol !== rolAnterior) {
-      return res.status(403).json({ message: 'No puedes cambiar tu propio rol desde este panel. Pide a otro administrador que lo haga.' });
+    const idObjetivo = Number(req.params.id);
+    const rolActual = await usuarioDAO.findRolById(idObjetivo);
+    if (!rolActual) return res.status(404).json({ message: 'Usuario no encontrado' });
+    // Los administradores quedan protegidos de eliminación/degradación accidental.
+    if (rolActual === 'administrador' && rol !== 'administrador') {
+      return res.status(400).json({ message: 'No se puede cambiar el rol de un administrador.' });
     }
-
-    const promovido = (rolAnterior === 'voluntario' && (rol === 'admin' || rol === 'organizador'));
-
-    // Defensa adicional: no permitir degradar al único administrador
-    // activo del sistema (aunque no sea una auto-modificación).
-    if (rolAnterior === 'admin' && rol !== 'admin' && usuarioObjetivo.activo) {
-      const activosAdmins = await usuarioDAO.contarAdminsActivos();
-      if (activosAdmins <= 1) {
-        return res.status(409).json({ message: 'No puedes quitar el rol de administrador al único administrador activo del sistema.' });
-      }
-    }
-
-    await usuarioDAO.actualizar(idObjetivo, { nombre, email, telefono, rol });
-
-    if (rol === 'organizador') {
-      await organizadorDAO.upsert(idObjetivo, nombre_organizacion);
-    } else {
-      await organizadorDAO.eliminarPorUsuario(idObjetivo);
-    }
-
-    if (promovido) {
-      await inscripcionDAO.cancelarTodasActivasPorVoluntario(idObjetivo);
-      await asistenciaDAO.eliminarPorVoluntario(idObjetivo);
-    }
-
-    res.json({ ok: true });
+    await usuarioDAO.actualizar(idObjetivo, { nombres, email, telefono, rol, institucion });
+    const usuario = await usuarioDAO.findConDetalle(idObjetivo);
+    res.json(usuario);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
 
-// PATCH /api/usuarios/:id/estado
-// Body: { activo: true | false }
+// PATCH /api/usuarios/:id/estado   Body: { activo: boolean }
+// Al suspender un alumno se anulan (no se borran) sus inscripciones
+// activas; un docente/administrador suspendido simplemente no puede
+// iniciar sesión, pero sus talleres NO se tocan (se conserva el
+// historial, igual que el resto del proyecto nunca borra nada).
 async function cambiarEstado(req, res) {
-  if (typeof req.body.activo !== 'boolean')
+  if (typeof req.body.activo !== 'boolean') {
     return res.status(400).json({ message: 'activo debe ser true o false' });
-
-  const idObjetivo = Number(req.params.id);
-
-  // No puedes suspender (ni reactivar) tu propia cuenta desde este panel:
-  // si te suspendes siendo el único admin, nadie más puede administrar
-  // el sistema.
-  if (idObjetivo === req.usuario.id) {
-    return res.status(403).json({ message: 'No puedes suspender tu propia cuenta desde este panel.' });
   }
-
   try {
-    const usuarioObjetivo = await usuarioDAO.findEstadoYRolById(idObjetivo);
-    if (!usuarioObjetivo)
-      return res.status(404).json({ message: 'Usuario no encontrado' });
-
-    // Defensa adicional: no dejar el sistema sin ningún administrador
-    // activo (aunque no sea una auto-suspensión).
-    if (req.body.activo === false && usuarioObjetivo.rol === 'admin' && usuarioObjetivo.activo) {
-      const activosAdmins = await usuarioDAO.contarAdminsActivos();
-      if (activosAdmins <= 1) {
-        return res.status(409).json({ message: 'No puedes suspender al único administrador activo del sistema.' });
-      }
+    const rolActual = await usuarioDAO.findRolById(req.params.id);
+    if (!rolActual) return res.status(404).json({ message: 'Usuario no encontrado' });
+    if (rolActual === 'administrador' && req.body.activo === false) {
+      return res.status(400).json({ message: 'La cuenta de administrador no se puede suspender ni eliminar.' });
     }
-
-    if (req.body.activo === false) {
-      await limpiarDatosUsuarioSuspendido(idObjetivo, usuarioObjetivo.rol);
+    if (req.body.activo === false && rolActual === 'alumno') {
+      await inscripcionDAO.anularActivasPorAlumno(req.params.id);
     }
-
-    await usuarioDAO.actualizarEstado(idObjetivo, req.body.activo);
-    
+    await usuarioDAO.actualizarEstado(req.params.id, req.body.activo);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 }
 
-// PATCH /api/usuarios/mi-perfil
-async function miPerfil(req, res) {
-  const { nombre, telefono } = req.body;
-  try {
-    await usuarioDAO.actualizarPerfil(req.usuario.id, { nombre, telefono });
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-}
-
-// GET /api/usuarios/exportar?formato=xlsx|pdf&id=<opcional>&rol=<opcional>&buscar=<opcional>
-// Sin "id": exporta el listado completo (respetando rol/buscar si se envían).
-// Con "id": exporta solo ese usuario (respaldo puntual, ej. antes de suspenderlo).
+// GET /api/usuarios/exportar?formato=xlsx|pdf&id=&rol=&buscar=
 async function exportar(req, res) {
   const formato = String(req.query.formato ?? '').toLowerCase();
   if (!['xlsx', 'pdf'].includes(formato)) {
@@ -200,12 +129,10 @@ async function exportar(req, res) {
     let titulo;
 
     if (req.query.id) {
-      const usuario = await usuarioDAO.findConOrganizacion(req.query.id);
-      if (!usuario) {
-        return res.status(404).json({ message: 'Usuario no encontrado' });
-      }
+      const usuario = await usuarioDAO.findConDetalle(req.query.id);
+      if (!usuario) return res.status(404).json({ message: 'Usuario no encontrado' });
       usuarios = [usuario];
-      titulo = `Usuario - ${usuario.nombre}`;
+      titulo = `Usuario - ${usuario.nombres}`;
     } else {
       usuarios = await usuarioDAO.listar({ rol: req.query.rol, buscar: req.query.buscar });
       titulo = 'Listado de usuarios';
@@ -231,4 +158,4 @@ async function exportar(req, res) {
   }
 }
 
-module.exports = { listar, destinatariosActivos, obtener, actualizar, cambiarEstado, miPerfil, exportar };
+module.exports = { listar, obtener, crearDocente, actualizar, cambiarEstado, exportar };

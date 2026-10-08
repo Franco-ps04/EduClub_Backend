@@ -1,19 +1,7 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-/**
- * Configuración de conexión a PostgreSQL.
- *
- * Soporta dos formas de configurar la conexión (se usa la que esté presente):
- *  1) DATABASE_URL: cadena de conexión completa. Es la forma recomendada
- *     para Supabase y Render (Render la inyecta automáticamente si usas su
- *     Postgres administrado; Supabase la provee en Project Settings > Database).
- *     Ejemplo: postgresql://usuario:password@host:5432/postgres
- *  2) Variables sueltas: DB_HOST, DB_DATABASE, DB_USER, DB_PASSWORD, DB_PORT.
- *
- * SSL: Supabase y Render requieren SSL. Se activa automáticamente salvo que
- * DB_SSL=false (útil para una PostgreSQL local en desarrollo).
- */
+/** Configuracion de conexion a PostgreSQL. */
 
 const useSSL = process.env.DB_SSL !== 'false';
 
@@ -24,7 +12,7 @@ const connectionConfig = process.env.DATABASE_URL
     }
   : {
       host: process.env.DB_HOST || 'localhost',
-      database: process.env.DB_DATABASE || 'greenunitydb',
+      database: process.env.DB_DATABASE || 'edutallerdb',
       user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD,
       port: parseInt(process.env.DB_PORT || '5432'),
@@ -42,7 +30,7 @@ async function verificarConexion() {
   const client = await pool.connect();
   try {
     await client.query('SELECT 1');
-    console.log('✅ Conectado a PostgreSQL');
+    console.log('✅ Conectado a PostgreSQL (EduTaller)');
   } finally {
     client.release();
   }

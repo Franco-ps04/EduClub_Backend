@@ -1,55 +1,53 @@
 const { query } = require('../config/db');
 
 class ReporteDAO {
-  async resumenEventos() {
+  async resumenTalleres() {
     const { rows } = await query(
       `SELECT
-         e.id_evento,
-         e.nombre,
-         e.descripcion,
-         TO_CHAR(e.fecha, 'YYYY-MM-DD') AS fecha,
-         TO_CHAR(e.hora, 'HH24:MI:SS') AS hora,
-         e.ubicacion,
-         e.capacidad,
-         e.inscritos,
-         e.estado,
-         e.latitud,
-         e.longitud,
-         e.imagen_url,
-         t.nombre AS tipo,
-         u.nombre AS organizador,
-         o.nombre_organizacion AS organizacion,
-         COALESCE(asist.asistieron, 0) AS "asistieron",
-         COALESCE(asist."noAsistieron", 0) AS "noAsistieron"
-       FROM Evento e
-       INNER JOIN TipoEvento t ON e.id_tipo = t.id_tipo
-       INNER JOIN Organizador o ON e.id_organizador = o.id_organizador
-       INNER JOIN Usuario u ON o.id_usuario = u.id_usuario
+         t.id_taller, t.nombre, t.descripcion,
+         TO_CHAR(t.fecha, 'YYYY-MM-DD') AS fecha,
+         TO_CHAR(t.hora, 'HH24:MI') AS hora,
+         t.ubicacion, t.capacidad, t.estado,
+         ta.nombre AS area,
+         u.nombres AS docente,
+         d.institucion,
+         COALESCE((
+           SELECT COUNT(*)::int FROM Inscripcion i
+           WHERE i.id_taller = t.id_taller AND i.estado <> 'Anulado'
+         ), 0) AS inscritos,
+         COALESCE(asist.asistieron, 0) AS asistieron,
+         COALESCE(asist.no_asistieron, 0) AS "noAsistieron"
+       FROM Taller t
+       INNER JOIN TipoArea ta ON ta.id_area = t.id_area
+       INNER JOIN Docente d ON d.id_docente = t.id_docente
+       INNER JOIN Usuario u ON u.id_usuario = d.id_usuario
        LEFT JOIN (
          SELECT
-           i.id_evento,
+           s.id_taller,
            SUM(CASE WHEN a.asistio = true THEN 1 ELSE 0 END)::int AS asistieron,
-           SUM(CASE WHEN a.asistio = false THEN 1 ELSE 0 END)::int AS "noAsistieron"
-         FROM Inscripcion i
-         LEFT JOIN Asistencia a ON a.id_inscripcion = i.id_inscripcion
-         GROUP BY i.id_evento
-       ) asist ON asist.id_evento = e.id_evento
-       ORDER BY e.fecha DESC, e.hora DESC, e.id_evento DESC`
+           SUM(CASE WHEN a.asistio = false THEN 1 ELSE 0 END)::int AS no_asistieron
+         FROM Sesion s
+         LEFT JOIN Asistencia a ON a.id_sesion = s.id_sesion
+         GROUP BY s.id_taller
+       ) asist ON asist.id_taller = t.id_taller
+       WHERE t.archivado = false
+       ORDER BY t.fecha DESC, t.hora DESC, t.id_taller DESC`
     );
     return rows;
   }
 
-  async topVoluntarios() {
+  /** Alumnos con más sesiones asistidas (equivalente a "voluntarios más activos"). */
+  async topAlumnos() {
     const { rows } = await query(
       `SELECT
-         u.id_usuario,
-         u.nombre,
-         COUNT(i.id_inscripcion)::int AS eventos
+         u.id_usuario, u.nombres,
+         COUNT(a.id_asistencia)::int AS talleres
        FROM Usuario u
-       LEFT JOIN Inscripcion i ON i.id_voluntario = u.id_usuario
-       WHERE u.activo = true AND u.rol = 'voluntario'
-       GROUP BY u.id_usuario, u.nombre
-       ORDER BY COUNT(i.id_inscripcion) DESC, u.nombre ASC
+       INNER JOIN Inscripcion i ON i.id_alumno = u.id_usuario
+       LEFT JOIN Asistencia a ON a.id_inscripcion = i.id_inscripcion AND a.asistio = true
+       WHERE u.activo = true AND u.rol = 'alumno'
+       GROUP BY u.id_usuario, u.nombres
+       ORDER BY COUNT(a.id_asistencia) DESC, u.nombres ASC
        LIMIT 10`
     );
     return rows;
