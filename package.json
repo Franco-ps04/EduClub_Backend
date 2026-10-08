@@ -7,7 +7,7 @@
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
     "seed:admin": "node scripts/seed-admin.js",
-    "migrar:imagenes": "node scripts/migrar-imagenes-supabase.js",
+    "seed:reglas-diploma": "node scripts/seed-reglas-diploma.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
