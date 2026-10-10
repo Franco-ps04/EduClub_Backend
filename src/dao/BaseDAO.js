@@ -2,10 +2,8 @@ const { query } = require('../config/db');
 
 /**
  * BaseDAO
- * Encapsula el acceso a datos común a todas las entidades (SRP: esta clase
+ * Encapsula el acceso a datos comun a todas las entidades (SRP: esta clase
  * solo sabe hablar con la base de datos, nunca contiene reglas de negocio).
- * Las DAO concretas extienden esta clase (OCP/LSP: se puede sustituir o
- * extender sin modificar el comportamiento base).
  */
 class BaseDAO {
   constructor(tableName, pkColumn) {

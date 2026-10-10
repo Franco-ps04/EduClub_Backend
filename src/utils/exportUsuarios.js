@@ -3,66 +3,52 @@ const PDFDocument = require('pdfkit');
 
 const COLUMNAS = [
   { header: 'ID', key: 'id_usuario', width: 8 },
-  { header: 'Nombre', key: 'nombre', width: 28 },
+  { header: 'Nombre', key: 'nombres', width: 28 },
   { header: 'Email', key: 'email', width: 30 },
   { header: 'Teléfono', key: 'telefono', width: 14 },
   { header: 'Rol', key: 'rol', width: 14 },
   { header: 'Estado', key: 'estado', width: 12 },
-  { header: 'Organización', key: 'organizacion', width: 24 },
-  { header: 'Eventos finalizados', key: 'num_eventos', width: 18 },
+  { header: 'Institución', key: 'institucion', width: 24 },
+  { header: 'Talleres', key: 'talleres', width: 12 },
   { header: 'Registrado el', key: 'creado_en', width: 14 }
 ];
+
+function talleresDe(u) {
+  return u.rol === 'docente' ? (u.talleres_docente ?? 0) : (u.talleres_alumno ?? 0);
+}
 
 function normalizarFila(u) {
   return {
     id_usuario: u.id_usuario,
-    nombre: u.nombre,
+    nombres: u.nombres,
     email: u.email,
     telefono: u.telefono,
     rol: u.rol,
     estado: u.activo ? 'Activo' : 'Suspendido',
-    organizacion: u.organizacion ?? '—',
-    num_eventos: u.num_eventos ?? 0,
+    institucion: u.institucion ?? '—',
+    talleres: talleresDe(u),
     creado_en: u.creado_en ?? '—'
   };
 }
 
-/**
- * Genera un archivo Excel (.xlsx) con uno o varios usuarios.
- * @param {object[]} usuarios - filas ya obtenidas de UsuarioDAO
- * @param {string} titulo - título de la hoja/reporte
- * @returns {Promise<Buffer>}
- */
 async function generarExcelUsuarios(usuarios, titulo = 'Usuarios') {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'GreenUnity';
+  workbook.creator = 'EduTaller';
   workbook.created = new Date();
 
-  const sheet = workbook.addWorksheet(titulo.substring(0, 31)); // Excel limita el nombre a 31 caracteres
+  const sheet = workbook.addWorksheet(titulo.substring(0, 31));
   sheet.columns = COLUMNAS;
 
-  sheet.getRow(1).font = { bold: true };
-  sheet.getRow(1).fill = {
-    type: 'pattern',
-    pattern: 'solid',
-    fgColor: { argb: 'FF2D9E5F' }
-  };
+  sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2D9E5F' } };
   sheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
   usuarios.forEach((u) => sheet.addRow(normalizarFila(u)));
-
   sheet.autoFilter = { from: 'A1', to: `${String.fromCharCode(64 + COLUMNAS.length)}1` };
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
 }
 
-/**
- * Genera un archivo PDF con uno o varios usuarios, en formato tabla simple.
- * @param {object[]} usuarios
- * @param {string} titulo
- * @returns {Promise<Buffer>}
- */
 function generarPdfUsuarios(usuarios, titulo = 'Usuarios') {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
@@ -72,7 +58,7 @@ function generarPdfUsuarios(usuarios, titulo = 'Usuarios') {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(16).fillColor('#2D9E5F').text(`GreenUnity — ${titulo}`, { align: 'left' });
+    doc.fontSize(16).fillColor('#2D9E5F').text(`EduTaller — ${titulo}`, { align: 'left' });
     doc.fontSize(9).fillColor('#666666')
       .text(`Generado el ${new Date().toLocaleString('es-PE')} — ${usuarios.length} usuario(s)`);
     doc.moveDown(1);
@@ -81,10 +67,10 @@ function generarPdfUsuarios(usuarios, titulo = 'Usuarios') {
       { label: 'Nombre', width: 130 },
       { label: 'Email', width: 150 },
       { label: 'Teléfono', width: 70 },
-      { label: 'Rol', width: 70 },
+      { label: 'Rol', width: 65 },
       { label: 'Estado', width: 60 },
-      { label: 'Organización', width: 120 },
-      { label: 'Eventos', width: 50 }
+      { label: 'Institución', width: 120 },
+      { label: 'Talleres', width: 50 }
     ];
 
     let y = doc.y;
@@ -110,10 +96,10 @@ function generarPdfUsuarios(usuarios, titulo = 'Usuarios') {
       }
       doc.font('Helvetica').fontSize(8).fillColor('#222222');
       const values = [
-        row.nombre, row.email, row.telefono, row.rol,
+        row.nombres, row.email, row.telefono, row.rol,
         row.activo ? 'Activo' : 'Suspendido',
-        row.organizacion ?? '—',
-        String(row.num_eventos ?? 0)
+        row.institucion ?? '—',
+        String(talleresDe(row))
       ];
       values.forEach((val, i) => {
         doc.text(String(val ?? ''), x + 4, y + 6, { width: cols[i].width - 8, ellipsis: true });

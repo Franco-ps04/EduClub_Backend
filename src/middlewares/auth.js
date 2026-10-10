@@ -3,7 +3,7 @@ require('dotenv').config();
 const usuarioDAO = require('../dao/UsuarioDAO');
 
 // Se ejecuta ANTES de cada ruta protegida.
-// Verifica que el token JWT enviado por Angular sea válido.
+// Verifica que el token JWT enviado por Angular sea valido.
 async function verificarToken(req, res, next) {
   const header = req.headers['authorization'];
   if (!header)
@@ -15,17 +15,17 @@ async function verificarToken(req, res, next) {
     const user = await usuarioDAO.findAuthById(decoded.id);
 
     if (!user) {
-      return res.status(401).json({ message: 'Token inválido o expirado' });
+      return res.status(401).json({ message: 'Token invalido o expirado' });
     }
 
     if (!user.activo) {
       return res.status(403).json({ message: 'Cuenta suspendida' });
     }
 
-    req.usuario = decoded; // { id, email, rol, nombre }
+    req.usuario = decoded; // { id, email, rol, nombres }
     next(); // continuar al endpoint
   } catch {
-    res.status(401).json({ message: 'Token inválido o expirado' });
+    res.status(401).json({ message: 'Token invalido o expirado' });
   }
 }
 

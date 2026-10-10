@@ -1,11 +1,11 @@
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 
-const COLUMNAS_EVENTOS = [
-  { header: 'Evento', key: 'nombre', width: 30 },
-  { header: 'Tipo', key: 'tipo', width: 16 },
+const COLUMNAS_TALLERES = [
+  { header: 'Taller', key: 'nombre', width: 30 },
+  { header: 'Área', key: 'area', width: 16 },
   { header: 'Fecha', key: 'fecha', width: 12 },
-  { header: 'Organizador', key: 'organizador', width: 22 },
+  { header: 'Docente', key: 'docente', width: 22 },
   { header: 'Capacidad', key: 'capacidad', width: 12 },
   { header: 'Inscritos', key: 'inscritos', width: 12 },
   { header: 'Asistieron', key: 'asistieron', width: 12 },
@@ -13,9 +13,9 @@ const COLUMNAS_EVENTOS = [
   { header: 'Estado', key: 'estado', width: 12 }
 ];
 
-const COLUMNAS_VOLUNTARIOS = [
-  { header: 'Voluntario', key: 'nombre', width: 30 },
-  { header: 'Eventos participados', key: 'eventos', width: 20 }
+const COLUMNAS_ALUMNOS = [
+  { header: 'Alumno', key: 'nombres', width: 30 },
+  { header: 'Sesiones asistidas', key: 'talleres', width: 20 }
 ];
 
 function headerVerde(row) {
@@ -23,13 +23,10 @@ function headerVerde(row) {
   row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2D9E5F' } };
 }
 
-/**
- * Genera un Excel con dos hojas: Eventos (con asistencia real, incluye
- * archivados) y Top voluntarios.
- */
-async function generarExcelReportes({ resumen, eventos, voluntarios }) {
+/** Excel con 3 hojas: Resumen, Talleres (asistencia real) y Top alumnos. */
+async function generarExcelReportes({ resumen, talleres, alumnos }) {
   const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'GreenUnity';
+  workbook.creator = 'EduTaller';
   workbook.created = new Date();
 
   const hojaResumen = workbook.addWorksheet('Resumen');
@@ -38,41 +35,31 @@ async function generarExcelReportes({ resumen, eventos, voluntarios }) {
     { header: 'Valor', key: 'v', width: 16 }
   ];
   headerVerde(hojaResumen.getRow(1));
-  hojaResumen.addRow({ k: 'Total de eventos', v: resumen.totalEventos });
+  hojaResumen.addRow({ k: 'Total de talleres', v: resumen.totalTalleres });
   hojaResumen.addRow({ k: 'Total de inscritos', v: resumen.totalInscritos });
   hojaResumen.addRow({ k: '% de asistencia', v: `${resumen.pctAsistencia}%` });
   hojaResumen.addRow({ k: 'Generado el', v: new Date().toLocaleString('es-PE') });
 
-  const hojaEventos = workbook.addWorksheet('Eventos');
-  hojaEventos.columns = COLUMNAS_EVENTOS;
-  headerVerde(hojaEventos.getRow(1));
-  eventos.forEach((e) => hojaEventos.addRow({
-    nombre: e.nombre,
-    tipo: e.tipo,
-    fecha: e.fecha,
-    organizador: e.organizador,
-    capacidad: e.capacidad,
-    inscritos: e.inscritos,
-    asistieron: e.asistieron,
-    noAsistieron: e.noAsistieron,
-    estado: e.estado
+  const hojaTalleres = workbook.addWorksheet('Talleres');
+  hojaTalleres.columns = COLUMNAS_TALLERES;
+  headerVerde(hojaTalleres.getRow(1));
+  talleres.forEach((t) => hojaTalleres.addRow({
+    nombre: t.nombre, area: t.area, fecha: t.fecha, docente: t.docente,
+    capacidad: t.capacidad, inscritos: t.inscritos,
+    asistieron: t.asistieron, noAsistieron: t.noAsistieron, estado: t.estado
   }));
-  hojaEventos.autoFilter = { from: 'A1', to: `${String.fromCharCode(64 + COLUMNAS_EVENTOS.length)}1` };
+  hojaTalleres.autoFilter = { from: 'A1', to: `${String.fromCharCode(64 + COLUMNAS_TALLERES.length)}1` };
 
-  const hojaVoluntarios = workbook.addWorksheet('Top voluntarios');
-  hojaVoluntarios.columns = COLUMNAS_VOLUNTARIOS;
-  headerVerde(hojaVoluntarios.getRow(1));
-  voluntarios.forEach((v) => hojaVoluntarios.addRow({ nombre: v.nombre, eventos: v.eventos }));
+  const hojaAlumnos = workbook.addWorksheet('Top alumnos');
+  hojaAlumnos.columns = COLUMNAS_ALUMNOS;
+  headerVerde(hojaAlumnos.getRow(1));
+  alumnos.forEach((a) => hojaAlumnos.addRow({ nombres: a.nombres, talleres: a.talleres }));
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
 }
 
-/**
- * Genera un PDF con el resumen general, la tabla de eventos y el top de
- * voluntarios.
- */
-function generarPdfReportes({ resumen, eventos, voluntarios }) {
+function generarPdfReportes({ resumen, talleres, alumnos }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
     const chunks = [];
@@ -81,20 +68,19 @@ function generarPdfReportes({ resumen, eventos, voluntarios }) {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    doc.fontSize(16).fillColor('#2D9E5F').text('GreenUnity — Reporte general', { align: 'left' });
-    doc.fontSize(9).fillColor('#666666')
-      .text(`Generado el ${new Date().toLocaleString('es-PE')}`);
+    doc.fontSize(16).fillColor('#2D9E5F').text('EduTaller — Reporte general', { align: 'left' });
+    doc.fontSize(9).fillColor('#666666').text(`Generado el ${new Date().toLocaleString('es-PE')}`);
     doc.moveDown(0.5);
     doc.fontSize(11).fillColor('#222222').text(
-      `Total de eventos: ${resumen.totalEventos}    |    Total de inscritos: ${resumen.totalInscritos}    |    % de asistencia: ${resumen.pctAsistencia}%`
+      `Total de talleres: ${resumen.totalTalleres}    |    Total de inscritos: ${resumen.totalInscritos}    |    % de asistencia: ${resumen.pctAsistencia}%`
     );
     doc.moveDown(1);
 
     const cols = [
-      { label: 'Evento', width: 150 },
-      { label: 'Tipo', width: 80 },
+      { label: 'Taller', width: 150 },
+      { label: 'Área', width: 80 },
       { label: 'Fecha', width: 65 },
-      { label: 'Organizador', width: 110 },
+      { label: 'Docente', width: 110 },
       { label: 'Cap.', width: 40 },
       { label: 'Inscr.', width: 45 },
       { label: 'Asist.', width: 45 },
@@ -128,7 +114,7 @@ function generarPdfReportes({ resumen, eventos, voluntarios }) {
       if (index % 2 === 0) doc.rect(startX, y, anchoTotal, rowHeight).fill('#F3F7F4');
       doc.font('Helvetica').fontSize(8).fillColor('#222222');
       const values = [
-        row.nombre, row.tipo, row.fecha, row.organizador,
+        row.nombre, row.area, row.fecha, row.docente,
         String(row.capacidad ?? ''), String(row.inscritos ?? ''),
         String(row.asistieron ?? ''), String(row.noAsistieron ?? ''), row.estado
       ];
@@ -148,26 +134,26 @@ function generarPdfReportes({ resumen, eventos, voluntarios }) {
     }
 
     drawTableHeader();
-    eventos.forEach((e, i) => {
+    talleres.forEach((t, i) => {
       checkPageBreak(drawTableHeader);
-      drawRow(e, i);
+      drawRow(t, i);
     });
 
     doc.addPage();
     y = doc.y;
-    drawHeader('Top voluntarios');
+    drawHeader('Top alumnos (sesiones asistidas)');
     let x = startX;
     doc.rect(startX, y, 300, rowHeight).fill('#2D9E5F');
     doc.font('Helvetica-Bold').fontSize(9).fillColor('#ffffff');
-    doc.text('Voluntario', x + 4, y + 6, { width: 220 });
-    doc.text('Eventos', x + 224, y + 6, { width: 76 });
+    doc.text('Alumno', x + 4, y + 6, { width: 220 });
+    doc.text('Sesiones', x + 224, y + 6, { width: 76 });
     y += rowHeight;
 
-    voluntarios.forEach((v, i) => {
+    alumnos.forEach((a, i) => {
       if (i % 2 === 0) doc.rect(startX, y, 300, rowHeight).fill('#F3F7F4');
       doc.font('Helvetica').fontSize(9).fillColor('#222222');
-      doc.text(v.nombre, startX + 4, y + 6, { width: 220, ellipsis: true });
-      doc.text(String(v.eventos ?? 0), startX + 224, y + 6, { width: 76 });
+      doc.text(a.nombres, startX + 4, y + 6, { width: 220, ellipsis: true });
+      doc.text(String(a.talleres ?? 0), startX + 224, y + 6, { width: 76 });
       y += rowHeight;
     });
 

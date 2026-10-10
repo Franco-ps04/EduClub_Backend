@@ -3,15 +3,13 @@ const auth = require('../middlewares/auth');
 const soloRoles = require('../middlewares/roles');
 const usuariosController = require('../controllers/usuarios.controller');
 
-router.get('/', auth, soloRoles('admin'), usuariosController.listar);
+const soloAdmin = soloRoles('administrador');
 
-// Debe ir antes de /:id
-router.get('/destinatarios-activos', auth, soloRoles('voluntario'), usuariosController.destinatariosActivos);
-router.get('/exportar', auth, soloRoles('admin'), usuariosController.exportar);
-
-router.get('/:id', auth, soloRoles('admin'), usuariosController.obtener);
-router.put('/:id', auth, soloRoles('admin'), usuariosController.actualizar);
-router.patch('/:id/estado', auth, soloRoles('admin'), usuariosController.cambiarEstado);
-router.patch('/mi-perfil', auth, usuariosController.miPerfil);
+router.get('/', auth, soloAdmin, usuariosController.listar);
+router.get('/exportar', auth, soloAdmin, usuariosController.exportar); // antes de "/:id"
+router.get('/:id', auth, soloAdmin, usuariosController.obtener);
+router.post('/', auth, soloAdmin, usuariosController.crearDocente);
+router.put('/:id', auth, soloAdmin, usuariosController.actualizar);
+router.patch('/:id/estado', auth, soloAdmin, usuariosController.cambiarEstado);
 
 module.exports = router;

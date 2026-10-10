@@ -1,21 +1,17 @@
 // ============================================================
-// Crea el primer usuario ADMIN directamente en la base de datos.
-// Necesario porque /api/auth/register solo crea voluntarios (por diseño,
-// igual que en el sistema original: promover a alguien a admin/organizador
-// se hace desde el panel de administración, y el primer admin no existe
-// todavía).
-//
-// USO:
-//   DATABASE_URL=... node scripts/seed-admin.js "Nombre Admin" admin@correo.com "Clave123" 987654321
+// Crea el primer usuario ADMINISTRADOR directamente en la base de datos.
+// Necesario porque /api/auth/register solo crea alumnos (por diseno: las
+// cuentas de Docente las crea el administrador desde la seccion Usuarios,
+// y el primer administrador no existe todavia).
 // ============================================================
 require('dotenv').config();
 const bcrypt = require('bcryptjs');
 const { Client } = require('pg');
 
 async function main() {
-  const [nombre, email, password, telefono] = process.argv.slice(2);
-  if (!nombre || !email || !password || !telefono) {
-    console.error('Uso: node scripts/seed-admin.js "Nombre" correo@ejemplo.com "Contraseña123" 987654321');
+  const [nombres, email, password, telefono] = process.argv.slice(2);
+  if (!nombres || !email || !password || !telefono) {
+    console.error('Uso: node scripts/seed-admin.js "Nombre Apellido" correo@ejemplo.com "Contrasena123" 987654321');
     process.exit(1);
   }
 
@@ -24,7 +20,7 @@ async function main() {
     ? new Client({ connectionString: process.env.DATABASE_URL, ssl: useSSL ? { rejectUnauthorized: false } : false })
     : new Client({
         host: process.env.DB_HOST || 'localhost',
-        database: process.env.DB_DATABASE || 'greenunitydb',
+        database: process.env.DB_DATABASE || 'edutallerdb',
         user: process.env.DB_USER || 'postgres',
         password: process.env.DB_PASSWORD,
         port: parseInt(process.env.DB_PORT || '5432'),
@@ -42,19 +38,19 @@ async function main() {
 
   const hash = await bcrypt.hash(password, 10);
   const result = await client.query(
-    `INSERT INTO Usuario (nombre, email, contrasena, telefono, rol)
-     VALUES ($1, $2, $3, $4, 'admin')
+    `INSERT INTO Usuario (nombres, email, contrasena, telefono, rol)
+     VALUES ($1, $2, $3, $4, 'administrador')
      RETURNING id_usuario`,
-    [nombre, email, hash, telefono]
+    [nombres, email, hash, telefono]
   );
   const idUsuario = result.rows[0].id_usuario;
   await client.query('INSERT INTO Administrador (id_usuario) VALUES ($1)', [idUsuario]);
 
-  console.log(`✅ Admin creado: ${email} (id_usuario=${idUsuario})`);
+  console.log(`✅ Administrador creado: ${email} (id_usuario=${idUsuario})`);
   await client.end();
 }
 
 main().catch((err) => {
-  console.error('Error creando admin:', err.message);
+  console.error('Error creando administrador:', err.message);
   process.exit(1);
 });
