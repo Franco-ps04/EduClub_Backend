@@ -142,13 +142,17 @@ async function registrar(req, res) {
           continue;
         }
         const hash = await bcrypt.hash(fila.contrasena, 10);
-        const idUsuario = await usuarioDAO.crearUsuario({
-          nombres: fila.nombre, email: fila.correo, hash, telefono: fila.telefono, rol: 'alumno'
+        const idUsuario = await usuarioDAO.registrarAlumno({
+          nombres: fila.nombre, email: fila.correo, hash, telefono: fila.telefono
         });
-        await usuarioDAO.crearAlumno(idUsuario);
         await cargaAlumnoDAO.marcarCreado(fila.id_detalle, idUsuario);
-      } catch {
-        await cargaAlumnoDAO.marcarError(fila.id_detalle, ESTADO_DB.INVALIDO);
+      } catch (error) {
+        // Si el correo se registró en otra petición después de validar el Excel,
+        // el índice UNIQUE de Usuario.email es la última barrera de seguridad.
+        await cargaAlumnoDAO.marcarError(
+          fila.id_detalle,
+          error?.code === '23505' ? ESTADO_DB.CORREO_EXISTE : ESTADO_DB.INVALIDO
+        );
       }
     }
 

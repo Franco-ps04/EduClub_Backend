@@ -117,6 +117,39 @@ async function cambiarEstado(req, res) {
   }
 }
 
+
+// GET /api/usuarios/mi-perfil (roles autenticados)
+async function obtenerMiPerfil(req, res) {
+  try {
+    const perfil = await usuarioDAO.findPerfilById(req.usuario.id);
+    if (!perfil) return res.status(404).json({ message: 'No se encontró el perfil del usuario.' });
+    res.json(perfil);
+  } catch (err) {
+    res.status(500).json({ message: 'No se pudo cargar el perfil.' });
+  }
+}
+
+// PATCH /api/usuarios/mi-perfil. El correo y el rol no se pueden modificar aquí.
+async function actualizarMiPerfil(req, res) {
+  const nombres = String(req.body.nombres ?? req.body.nombre ?? '').trim();
+  const telefono = soloDigitos(req.body.telefono);
+
+  if (nombres.length < 3 || nombres.length > 120) {
+    return res.status(400).json({ message: 'El nombre debe tener entre 3 y 120 caracteres.' });
+  }
+  if (telefono.length !== 9) {
+    return res.status(400).json({ message: 'El teléfono debe tener 9 dígitos.' });
+  }
+
+  try {
+    await usuarioDAO.actualizarPerfil(req.usuario.id, { nombres, telefono });
+    const perfil = await usuarioDAO.findPerfilById(req.usuario.id);
+    res.json({ ok: true, message: 'Perfil actualizado correctamente.', perfil });
+  } catch (err) {
+    res.status(500).json({ message: 'No se pudo actualizar el perfil.' });
+  }
+}
+
 // GET /api/usuarios/exportar?formato=xlsx|pdf&id=&rol=&buscar=
 async function exportar(req, res) {
   const formato = String(req.query.formato ?? '').toLowerCase();
@@ -158,4 +191,4 @@ async function exportar(req, res) {
   }
 }
 
-module.exports = { listar, obtener, crearDocente, actualizar, cambiarEstado, exportar };
+module.exports = { listar, obtener, crearDocente, actualizar, cambiarEstado, exportar, obtenerMiPerfil, actualizarMiPerfil };

@@ -1,7 +1,7 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "GreenUnity API - PostgreSQL (Supabase/Render) - Arquitectura MVC + DAO",
+  "description": "EduTaller API - PostgreSQL (Supabase/Render) - Arquitectura MVC + DAO",
   "main": "index.js",
   "scripts": {
     "start": "node src/index.js",

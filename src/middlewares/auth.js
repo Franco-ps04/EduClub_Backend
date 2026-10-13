@@ -22,7 +22,15 @@ async function verificarToken(req, res, next) {
       return res.status(403).json({ message: 'Cuenta suspendida' });
     }
 
-    req.usuario = decoded; // { id, email, rol, nombres }
+    // Los permisos salen del rol actual en la BD, no solo del claim del JWT.
+    // Así un cambio de rol/suspensión tiene efecto sin esperar a que expire el token.
+    req.usuario = {
+      ...decoded,
+      id: user.id_usuario,
+      email: user.email,
+      rol: user.rol,
+      nombres: user.nombres
+    };
     next(); // continuar al endpoint
   } catch {
     res.status(401).json({ message: 'Token invalido o expirado' });

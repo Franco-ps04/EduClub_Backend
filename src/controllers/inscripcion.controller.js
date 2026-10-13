@@ -2,8 +2,60 @@ const tallerDAO = require('../dao/TallerDAO');
 const sesionDAO = require('../dao/SesionDAO');
 const asistenciaDAO = require('../dao/AsistenciaDAO');
 const notificacionDAO = require('../dao/NotificacionDAO');
+const inscripcionDAO = require('../dao/InscripcionDAO');
+const { crearUrlFirmadaTaller } = require('../config/supabaseStorage');
 
 const ESTADOS_TERMINALES = ['Finalizado', 'Cancelado'];
+
+
+// GET /api/inscripcion/mis (alumno)
+async function misInscripcionesAlumno(req, res) {
+  try {
+    const data = await inscripcionDAO.misInscripciones(req.usuario.id);
+    const conImagenes = await Promise.all(data.map(async (item) => ({
+      ...item,
+      imagen_url: item.imagen_url ? await crearUrlFirmadaTaller(item.imagen_url) : null
+    })));
+    res.json(conImagenes);
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.message || 'No se pudieron cargar tus inscripciones.' });
+  }
+}
+
+// POST /api/inscripcion (alumno) Body: { idTaller }
+async function inscribirseAlumno(req, res) {
+  const idTaller = Number(req.body.idTaller ?? req.body.id_taller);
+  if (!Number.isInteger(idTaller) || idTaller < 1) {
+    return res.status(400).json({ message: 'Selecciona un taller válido.' });
+  }
+  try {
+    const resultado = await inscripcionDAO.inscribir(req.usuario.id, idTaller);
+    res.status(201).json({
+      ok: true,
+      id_inscripcion: resultado.id_inscripcion,
+      reactivada: resultado.reactivada,
+      message: resultado.reactivada ? 'Inscripción reactivada correctamente.' : 'Inscripción realizada correctamente.'
+    });
+  } catch (err) {
+    res.status(err.status || (err.code === '23505' ? 409 : 500)).json({
+      message: err.code === '23505' ? 'Ya estás inscrito en este taller.' : (err.message || 'No se pudo completar la inscripción.')
+    });
+  }
+}
+
+// PATCH /api/inscripcion/:id/cancelar (alumno)
+async function cancelarInscripcionAlumno(req, res) {
+  const idInscripcion = Number(req.params.id);
+  if (!Number.isInteger(idInscripcion) || idInscripcion < 1) {
+    return res.status(400).json({ message: 'La inscripción indicada no es válida.' });
+  }
+  try {
+    await inscripcionDAO.cancelar(idInscripcion, req.usuario.id);
+    res.json({ ok: true, message: 'Inscripción cancelada correctamente.' });
+  } catch (err) {
+    res.status(err.status || 500).json({ message: err.message || 'No se pudo cancelar la inscripción.' });
+  }
+}
 
 // GET /api/inscripcion/talleres
 // Lista compartida (administrador y docente ven todos los talleres, igual
@@ -115,4 +167,7 @@ async function crearNotificacion(req, res) {
   }
 }
 
-module.exports = { listarTalleres, resumenTaller, listarPorSesion, registrarAsistencia, crearNotificacion };
+module.exports = {
+  misInscripcionesAlumno, inscribirseAlumno, cancelarInscripcionAlumno,
+  listarTalleres, resumenTaller, listarPorSesion, registrarAsistencia, crearNotificacion
+};

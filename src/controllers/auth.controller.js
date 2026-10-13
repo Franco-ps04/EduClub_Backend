@@ -16,7 +16,7 @@ function firmarToken(user) {
 // Sirve para los 3 roles (alumno, docente, administrador); el frontend
 // decide a donde redirigir segun el rol devuelto.
 async function login(req, res) {
-  const email = String(req.body.email ?? '').trim();
+  const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
 
   if (!email || !validarEmail(email)) {
@@ -61,7 +61,7 @@ async function login(req, res) {
 // crea con scripts/seed-admin.js.
 async function register(req, res) {
   const nombres = String(req.body.nombres ?? '').trim();
-  const email = String(req.body.email ?? '').trim();
+  const email = String(req.body.email ?? '').trim().toLowerCase();
   const password = String(req.body.password ?? '');
   const telefono = soloDigitos(req.body.telefono);
 
@@ -84,8 +84,7 @@ async function register(req, res) {
       return res.status(409).json({ message: 'El correo ya esta registrado' });
 
     const hash = await bcrypt.hash(password, 10);
-    const newId = await usuarioDAO.crearUsuario({ nombres, email, hash, telefono, rol: 'alumno' });
-    await usuarioDAO.crearAlumno(newId);
+    const newId = await usuarioDAO.registrarAlumno({ nombres, email, hash, telefono });
 
     const token = jwt.sign(
       { id: newId, email, rol: 'alumno', nombres },
@@ -95,6 +94,9 @@ async function register(req, res) {
 
     res.status(201).json({ id: newId, nombres, email, telefono, rol: 'alumno', token });
   } catch (err) {
+    if (err.code === '23505') {
+      return res.status(409).json({ message: 'El correo ya esta registrado' });
+    }
     res.status(500).json({ message: err.message });
   }
 }
@@ -102,7 +104,7 @@ async function register(req, res) {
 // POST /api/auth/recuperar-contrasena
 // Body: { email, telefono, nuevaContrasena }
 async function recuperarContrasena(req, res) {
-  const email = String(req.body.email ?? '').trim();
+  const email = String(req.body.email ?? '').trim().toLowerCase();
   const telefono = soloDigitos(req.body.telefono);
   const nuevaContrasena = String(req.body.nuevaContrasena ?? '');
 

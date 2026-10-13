@@ -1,4 +1,4 @@
-const { query } = require('../config/db');
+const { query, pool } = require('../config/db');
 const BaseDAO = require('./BaseDAO');
 
 /**
@@ -36,7 +36,43 @@ class UsuarioDAO extends BaseDAO {
 
   async findAuthById(id) {
     const { rows } = await query(
-      `SELECT id_usuario, activo FROM Usuario WHERE id_usuario = $1`,
+      `SELECT id_usuario, nombres, email, rol, activo FROM Usuario WHERE id_usuario = $1`,
+      [id]
+    );
+    return rows[0] || null;
+  }
+
+
+  /** Crea Usuario + Alumno en una sola transacción para evitar cuentas incompletas. */
+  async registrarAlumno({ nombres, email, hash, telefono }) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const userResult = await client.query(
+        `INSERT INTO Usuario (nombres, email, contrasena, telefono, rol)
+         VALUES ($1, $2, $3, $4, 'alumno')
+         RETURNING id_usuario`,
+        [nombres, email, hash, telefono]
+      );
+      const idUsuario = userResult.rows[0].id_usuario;
+      await client.query('INSERT INTO Alumno (id_usuario) VALUES ($1)', [idUsuario]);
+      await client.query('COMMIT');
+      return idUsuario;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch (_) { /* transacción cerrada */ }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async findPerfilById(id) {
+    const { rows } = await query(
+      `SELECT u.id_usuario, u.nombres, u.email, u.telefono, u.rol, u.activo,
+              d.institucion
+       FROM Usuario u
+       LEFT JOIN Docente d ON d.id_usuario = u.id_usuario
+       WHERE u.id_usuario = $1`,
       [id]
     );
     return rows[0] || null;
@@ -100,7 +136,7 @@ class UsuarioDAO extends BaseDAO {
       `SELECT u.id_usuario, u.nombres, u.email, u.telefono, u.rol, u.activo,
               TO_CHAR(u.creado_en, 'YYYY-MM-DD') AS creado_en,
               d.institucion,
-              (SELECT COUNT(*)::int FROM Inscripcion i WHERE i.id_alumno = u.id_usuario) AS talleres_alumno,
+              (SELECT COUNT(*)::int FROM Inscripcion i WHERE i.id_alumno = u.id_usuario AND i.estado NOT IN ('Anulado', 'Cancelado')) AS talleres_alumno,
               (SELECT COUNT(*)::int FROM Taller t
                  INNER JOIN Docente doc ON doc.id_docente = t.id_docente
                  WHERE doc.id_usuario = u.id_usuario) AS talleres_docente
@@ -165,7 +201,7 @@ class UsuarioDAO extends BaseDAO {
          u.rol, u.activo,
          TO_CHAR(u.creado_en, 'YYYY-MM-DD') AS creado_en,
          d.institucion,
-         (SELECT COUNT(*)::int FROM Inscripcion i WHERE i.id_alumno = u.id_usuario) AS talleres_alumno,
+         (SELECT COUNT(*)::int FROM Inscripcion i WHERE i.id_alumno = u.id_usuario AND i.estado NOT IN ('Anulado', 'Cancelado')) AS talleres_alumno,
          (SELECT COUNT(*)::int FROM Taller t
             INNER JOIN Docente doc ON doc.id_docente = t.id_docente
             WHERE doc.id_usuario = u.id_usuario) AS talleres_docente

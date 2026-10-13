@@ -12,14 +12,14 @@ const SELECT_TALLER_BASE = `
     t.ubicacion, t.capacidad,
     COALESCE((
       SELECT COUNT(*)::int FROM Inscripcion i
-      WHERE i.id_taller = t.id_taller AND i.estado <> 'Anulado'
+      WHERE i.id_taller = t.id_taller AND i.estado NOT IN ('Anulado', 'Cancelado')
     ), 0) AS inscritos,
     t.modalidad, t.estado, t.archivado,
     t.latitud, t.longitud, t.institucion, t.imagen_url,
     t.id_area, ta.nombre AS area,
     t.id_tipo, te.nombre AS tipo_evento,
     t.id_docente, u.nombres AS docente, u.id_usuario AS id_usuario_docente,
-    d.institucion AS docente_institucion,
+    u.rol AS rol_docente, d.institucion AS docente_institucion,
     (SELECT COUNT(*)::int FROM Sesion s WHERE s.id_taller = t.id_taller) AS total_sesiones,
     COALESCE((
       SELECT ARRAY_AGG(x.dia_semana ORDER BY x.primera_fecha)
@@ -281,7 +281,7 @@ class TallerDAO extends BaseDAO {
       `SELECT
          (SELECT COUNT(DISTINCT i.id_alumno)::int
             FROM Inscripcion i INNER JOIN Taller t ON t.id_taller = i.id_taller
-            WHERE t.id_docente = $1 AND i.estado <> 'Anulado') AS alumnos_inscritos,
+            WHERE t.id_docente = $1 AND i.estado NOT IN ('Anulado', 'Cancelado')) AS alumnos_inscritos,
          (SELECT COUNT(DISTINCT a.id_sesion)::int
             FROM Asistencia a
             INNER JOIN Sesion s ON s.id_sesion = a.id_sesion
@@ -315,7 +315,7 @@ class TallerDAO extends BaseDAO {
       `SELECT
          (SELECT COUNT(DISTINCT i.id_alumno)::int
             FROM Inscripcion i INNER JOIN Taller t ON t.id_taller = i.id_taller
-            WHERE t.archivado = false AND i.estado <> 'Anulado') AS alumnos_inscritos,
+            WHERE t.archivado = false AND i.estado NOT IN ('Anulado', 'Cancelado')) AS alumnos_inscritos,
          (SELECT COUNT(DISTINCT a.id_sesion)::int
             FROM Asistencia a
             INNER JOIN Sesion s ON s.id_sesion = a.id_sesion
@@ -356,7 +356,7 @@ class TallerDAO extends BaseDAO {
       `SELECT COUNT(*)::int AS total_inscritos
        FROM Inscripcion i
        INNER JOIN Taller t ON t.id_taller = i.id_taller
-       WHERE t.archivado = false AND i.estado <> 'Anulado'`
+       WHERE t.archivado = false AND i.estado NOT IN ('Anulado', 'Cancelado')`
     );
 
     // Alumnos por area: alumnos distintos inscritos en talleres de cada area.
@@ -364,7 +364,7 @@ class TallerDAO extends BaseDAO {
       `SELECT ta.nombre AS area, COUNT(DISTINCT i.id_alumno)::int AS total
        FROM TipoArea ta
        LEFT JOIN Taller t ON t.id_area = ta.id_area AND t.archivado = false
-       LEFT JOIN Inscripcion i ON i.id_taller = t.id_taller AND i.estado <> 'Anulado'
+       LEFT JOIN Inscripcion i ON i.id_taller = t.id_taller AND i.estado NOT IN ('Anulado', 'Cancelado')
        GROUP BY ta.nombre
        ORDER BY total DESC, ta.nombre ASC`
     );

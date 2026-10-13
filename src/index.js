@@ -27,15 +27,17 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Registro de rutas
-// NOTA: las rutas de inscripciones, asistencia, mensajes, notificaciones,
-// usuarios, carga-alumnos y reportes se van agregando aqui a medida que se
-// construye cada seccion del panel admin/docente.
+// Rutas compartidas por Administrador/Docente y Alumno.
 app.use('/api/auth', require('./routes/auth.routes'));
+app.use('/api/contacto', require('./routes/contacto.routes'));
 app.use('/api/talleres', require('./routes/talleres.routes'));
 app.use('/api/reglas-diploma', require('./routes/reglaDiploma.routes'));
 app.use('/api', require('./routes/recursos.routes'));
 app.use('/api/inscripcion', require('./routes/inscripcion.routes'));
 app.use('/api/mensajes', require('./routes/mensajes.routes'));
+app.use('/api/notificaciones', require('./routes/notificaciones.routes'));
+app.use('/api/diplomas', require('./routes/diplomas.routes'));
+app.use('/api/reconocimientos', require('./routes/reconocimientos.routes'));
 app.use('/api/carga-alumnos', require('./routes/cargaAlumnos.routes'));
 app.use('/api/usuarios', require('./routes/usuarios.routes'));
 app.use('/api/reportes', require('./routes/reportes.routes'));

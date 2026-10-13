@@ -13,7 +13,7 @@ class ReporteDAO {
          d.institucion,
          COALESCE((
            SELECT COUNT(*)::int FROM Inscripcion i
-           WHERE i.id_taller = t.id_taller AND i.estado <> 'Anulado'
+           WHERE i.id_taller = t.id_taller AND i.estado NOT IN ('Anulado', 'Cancelado')
          ), 0) AS inscritos,
          COALESCE(asist.asistieron, 0) AS asistieron,
          COALESCE(asist.no_asistieron, 0) AS "noAsistieron"

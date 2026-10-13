@@ -18,7 +18,7 @@ class AsistenciaDAO {
       `SELECT i.id_inscripcion, u.id_usuario, u.nombres
        FROM Inscripcion i
        INNER JOIN Usuario u ON u.id_usuario = i.id_alumno
-       WHERE i.id_taller = $1 AND i.estado <> 'Anulado'
+       WHERE i.id_taller = $1 AND i.estado NOT IN ('Anulado', 'Cancelado')
        ORDER BY u.nombres ASC`,
       [idTaller]
     );
@@ -79,7 +79,7 @@ class AsistenciaDAO {
     const { rows } = await query(
       `SELECT i.id_inscripcion, u.id_usuario, u.nombres, a.asistio
        FROM Sesion s
-       INNER JOIN Inscripcion i ON i.id_taller = s.id_taller AND i.estado <> 'Anulado'
+       INNER JOIN Inscripcion i ON i.id_taller = s.id_taller AND i.estado NOT IN ('Anulado', 'Cancelado')
        INNER JOIN Usuario u ON u.id_usuario = i.id_alumno
        LEFT JOIN Asistencia a ON a.id_inscripcion = i.id_inscripcion AND a.id_sesion = s.id_sesion
        WHERE s.id_sesion = $1

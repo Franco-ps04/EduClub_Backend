@@ -3,7 +3,7 @@ const auth = require('../middlewares/auth');
 const soloRoles = require('../middlewares/roles');
 const mensajesController = require('../controllers/mensajes.controller');
 
-// Alumno (se usara cuando se construya esa seccion del proyecto)
+// Alumno: conversaciones personales y seguimiento de hilos tipo WhatsApp
 router.get('/destinatarios', auth, soloRoles('alumno'), mensajesController.destinatarios);
 router.get('/mis', auth, soloRoles('alumno'), mensajesController.misMensajes);
 router.post('/', auth, soloRoles('alumno'), mensajesController.crear);

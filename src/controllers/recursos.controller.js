@@ -2,6 +2,7 @@ const recursoDAO = require('../dao/RecursoDAO');
 const sesionDAO = require('../dao/SesionDAO');
 const tallerDAO = require('../dao/TallerDAO');
 const usuarioDAO = require('../dao/UsuarioDAO');
+const inscripcionDAO = require('../dao/InscripcionDAO');
 const { subirRecurso, crearUrlFirmadaRecurso } = require('../config/supabaseStorage');
 
 const TIPOS_VALIDOS = ['word', 'pdf', 'imagen'];
@@ -51,6 +52,20 @@ async function misTalleres(req, res) {
 async function listarRecursosPorTaller(req, res) {
   try {
     const idTaller = Number(req.params.idTaller);
+    if (!Number.isInteger(idTaller) || idTaller < 1) {
+      return res.status(400).json({ message: 'El taller indicado no es válido.' });
+    }
+
+    // El alumno solo puede consultar materiales de un taller en el que esté inscrito.
+    // Docente/administrador conserva el acceso administrativo anterior.
+    if (req.usuario.rol === 'alumno') {
+      const inscrito = await inscripcionDAO.tieneActiva(req.usuario.id, idTaller);
+      if (!inscrito) return res.status(403).json({ message: 'Debes estar inscrito en el taller para consultar sus materiales.' });
+    }
+
+    const taller = await tallerDAO.findByIdCompleto(idTaller);
+    if (!taller) return res.status(404).json({ message: 'Taller no encontrado.' });
+
     const [sesiones, recursos] = await Promise.all([
       sesionDAO.listarPorTaller(idTaller),
       recursoDAO.listarPorTaller(idTaller)

@@ -101,8 +101,8 @@ class MensajeDAO extends BaseDAO {
 
   async crear({ asunto, mensaje, idAlumno, idDestino, idTaller }) {
     const { rows } = await query(
-      `INSERT INTO Mensaje (asunto, mensaje, id_alumno, id_usuario, id_taller)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO Mensaje (asunto, mensaje, id_alumno, id_usuario, id_taller, leido, leido_por_alumno)
+       VALUES ($1, $2, $3, $4, $5, false, true)
        RETURNING id_mensaje`,
       [asunto, mensaje, idAlumno, idDestino, idTaller]
     );
@@ -110,10 +110,21 @@ class MensajeDAO extends BaseDAO {
   }
 
   async crearRespuesta(idMensaje, texto, idUsuario) {
+    const { rows: autor } = await query('SELECT rol FROM Usuario WHERE id_usuario = $1', [idUsuario]);
+    if (!autor.length) throw new Error('No se encontró al usuario que responde.');
+
     await query(
       `INSERT INTO RespuestaMensaje (id_mensaje, texto, id_usuario) VALUES ($1, $2, $3)`,
       [idMensaje, texto, idUsuario]
     );
+
+    // Si responde el alumno, el destinatario vuelve a tener un mensaje sin leer.
+    // Si responde el docente/admin, el alumno vuelve a tener una respuesta pendiente.
+    if (autor[0].rol === 'alumno') {
+      await query('UPDATE Mensaje SET leido = false, leido_por_alumno = true WHERE id_mensaje = $1', [idMensaje]);
+    } else {
+      await query('UPDATE Mensaje SET leido = true, leido_por_alumno = false WHERE id_mensaje = $1', [idMensaje]);
+    }
   }
 
   async findByIdYAlumno(idMensaje, idAlumno) {

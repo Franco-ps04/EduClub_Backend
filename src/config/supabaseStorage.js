@@ -3,6 +3,8 @@ const path = require('path');
 
 const BUCKET_TALLERES = process.env.SUPABASE_BUCKET_TALLERES || 'talleres';
 const BUCKET_RECURSOS = process.env.SUPABASE_BUCKET_RECURSOS || 'recursos';
+const BUCKET_DIPLOMAS = process.env.SUPABASE_BUCKET_DIPLOMAS || 'diplomas';
+const BUCKET_RECONOCIMIENTOS = process.env.SUPABASE_BUCKET_RECONOCIMIENTOS || 'reconocimientos';
 const URL_FIRMADA_EXPIRACION = Number(process.env.SUPABASE_STORAGE_SIGNED_URL_SECONDS || 3600);
 
 let clienteSupabase = null;
@@ -123,12 +125,43 @@ async function crearUrlFirmadaTaller(archivoUrl, opciones = {}) {
   return crearUrlFirmada(BUCKET_TALLERES, archivoUrl, opciones);
 }
 
+function extraerBucketObjeto(valor) {
+  if (!valor || !/^https?:\/\//i.test(String(valor).trim())) return null;
+  try {
+    const partes = new URL(String(valor).trim()).pathname.split('/').filter(Boolean);
+    const indiceObject = partes.indexOf('object');
+    if (indiceObject === -1) return null;
+    const modo = partes[indiceObject + 1];
+    if (!['public', 'sign', 'authenticated'].includes(modo)) return null;
+    return partes[indiceObject + 2] || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/** Firma archivos de diplomas, respetando el bucket de una URL antigua si lo contiene. */
+async function crearUrlFirmadaDiploma(archivoUrl, opciones = {}) {
+  const bucketOrigen = extraerBucketObjeto(archivoUrl) || BUCKET_DIPLOMAS;
+  return crearUrlFirmada(bucketOrigen, archivoUrl, opciones);
+}
+
+/** Firma archivos adjuntos a reconocimientos. Si la BD guarda una URL de Supabase,
+ * respeta el bucket de origen; si guarda una ruta, usa el bucket de reconocimientos. */
+async function crearUrlFirmadaReconocimiento(archivoUrl, opciones = {}) {
+  const bucketOrigen = extraerBucketObjeto(archivoUrl) || BUCKET_RECONOCIMIENTOS;
+  return crearUrlFirmada(bucketOrigen, archivoUrl, opciones);
+}
+
 module.exports = {
   subirImagenTaller,
   subirRecurso,
   crearUrlFirmadaRecurso,
   crearUrlFirmadaTaller,
+  crearUrlFirmadaDiploma,
+  crearUrlFirmadaReconocimiento,
   extraerRutaObjeto,
   BUCKET_TALLERES,
-  BUCKET_RECURSOS
+  BUCKET_RECURSOS,
+  BUCKET_DIPLOMAS,
+  BUCKET_RECONOCIMIENTOS
 };

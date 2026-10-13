@@ -4,6 +4,7 @@ const usuarioDAO = require('../dao/UsuarioDAO');
 const sesionDAO = require('../dao/SesionDAO');
 const { subirImagenTaller, crearUrlFirmadaTaller } = require('../config/supabaseStorage');
 const { validarDatosTaller, parseRequisitos } = require('../utils/tallerHelpers');
+const { estadoKey } = require('../utils/validators');
 
 /**
  * Valida la cantidad de dias segun el tipo de evento y devuelve el mensaje
@@ -59,12 +60,26 @@ async function listar(req, res) {
 
 // GET /api/talleres/publico  (seccion alumno: catalogo publico)
 async function listarPublico(req, res) {
+  const buscar = String(req.query.buscar ?? '').trim();
+  const modalidad = String(req.query.modalidad ?? '').trim();
+  const idAreaTexto = String(req.query.idArea ?? '').trim();
+  const idArea = idAreaTexto ? Number(idAreaTexto) : undefined;
+
+  if (buscar.length > 120) {
+    return res.status(400).json({ message: 'La búsqueda no debe superar 120 caracteres.' });
+  }
+  if (idAreaTexto && (!Number.isInteger(idArea) || idArea < 1)) {
+    return res.status(400).json({ message: 'El área seleccionada no es válida.' });
+  }
+  if (modalidad && !['Virtual', 'Presencial'].includes(modalidad)) {
+    return res.status(400).json({ message: 'La modalidad seleccionada no es válida.' });
+  }
+
   try {
-    const { buscar, idArea, modalidad } = req.query;
-    const talleres = await tallerDAO.listarPublico({ buscar, idArea: idArea ? Number(idArea) : undefined, modalidad });
+    const talleres = await tallerDAO.listarPublico({ buscar, idArea, modalidad: modalidad || undefined });
     res.json(await conRequisitos(talleres));
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'No se pudo cargar el catálogo de talleres.' });
   }
 }
 
@@ -83,15 +98,29 @@ async function listarMisTalleres(req, res) {
 
 // GET /api/talleres/:id
 async function obtener(req, res) {
+  const idTaller = Number(req.params.id);
+  if (!Number.isInteger(idTaller) || idTaller < 1) {
+    return res.status(400).json({ message: 'El taller indicado no es válido.' });
+  }
+
   try {
-    const taller = await tallerDAO.findByIdCompleto(Number(req.params.id));
+    const taller = await tallerDAO.findByIdCompleto(idTaller);
     if (!taller) return res.status(404).json({ message: 'Taller no encontrado' });
+
+    // El catálogo del alumno solo debe exponer talleres disponibles. Las
+    // inscripciones históricas y sus sesiones siguen visibles desde /inscripcion/mis.
+    if (req.usuario.rol === 'alumno' && (
+      taller.archivado === true ||
+      ['finalizado', 'cancelado'].includes(estadoKey(taller.estado))
+    )) {
+      return res.status(404).json({ message: 'Este taller ya no está disponible en el catálogo.' });
+    }
 
     taller.requisitos = await tallerDAO.findRequisitos(taller.id_taller);
     if (taller.imagen_url) taller.imagen_url = await crearUrlFirmadaTaller(taller.imagen_url);
     res.json(taller);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'No se pudo cargar el taller.' });
   }
 }
 
@@ -304,10 +333,27 @@ async function estadisticas(req, res) {
 
 // GET /api/talleres/:id/sesiones
 async function listarSesiones(req, res) {
+  const idTaller = Number(req.params.id);
+  if (!Number.isInteger(idTaller) || idTaller < 1) {
+    return res.status(400).json({ message: 'El taller indicado no es válido.' });
+  }
+
   try {
-    res.json(await sesionDAO.listarPorTaller(Number(req.params.id)));
+    const taller = await tallerDAO.findByIdCompleto(idTaller);
+    if (!taller) return res.status(404).json({ message: 'Taller no encontrado.' });
+
+    // Un alumno puede consultar horario/sesiones antes de inscribirse, pero
+    // no explorar talleres archivados o que ya salieron del catálogo vigente.
+    if (req.usuario.rol === 'alumno' && (
+      taller.archivado === true ||
+      ['finalizado', 'cancelado'].includes(estadoKey(taller.estado))
+    )) {
+      return res.status(404).json({ message: 'Las sesiones de este taller ya no están disponibles en el catálogo.' });
+    }
+
+    res.json(await sesionDAO.listarPorTaller(idTaller));
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'No se pudieron cargar las sesiones del taller.' });
   }
 }
 
