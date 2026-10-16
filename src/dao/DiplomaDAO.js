@@ -28,6 +28,46 @@ function expresionSnapshot(columnas, opciones, aliasRegla, columnaRegla, alias) 
  * de una lista blanca y de columnas verificadas en information_schema.
  */
 class DiplomaDAO {
+  async datosParaGenerar(idAlumno, idTaller) {
+    const { rows } = await query(
+      `SELECT
+         i.id_inscripcion,
+         i.id_alumno,
+         t.id_taller,
+         t.nombre AS taller,
+         te.nombre AS tipo_evento,
+         alumno.nombres AS nombre_alumno,
+         docente.nombres AS nombre_docente,
+         t.estado AS estado_taller,
+         estadisticas.total_sesiones,
+         estadisticas.asistencias_registradas,
+         estadisticas.asistencias_correctas,
+         TO_CHAR(CURRENT_DATE, 'YYYY-MM-DD') AS fecha_emision
+       FROM Inscripcion i
+       INNER JOIN Taller t ON t.id_taller = i.id_taller
+       INNER JOIN TipoEvento te ON te.id_tipo = t.id_tipo
+       INNER JOIN Usuario alumno ON alumno.id_usuario = i.id_alumno
+       INNER JOIN Docente dc ON dc.id_docente = t.id_docente
+       INNER JOIN Usuario docente ON docente.id_usuario = dc.id_usuario
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(s.id_sesion)::int AS total_sesiones,
+           COUNT(a.id_asistencia)::int AS asistencias_registradas,
+           COUNT(a.id_asistencia) FILTER (WHERE a.asistio = TRUE)::int AS asistencias_correctas
+         FROM Sesion s
+         LEFT JOIN Asistencia a
+           ON a.id_sesion = s.id_sesion AND a.id_inscripcion = i.id_inscripcion
+         WHERE s.id_taller = t.id_taller
+       ) estadisticas ON TRUE
+       WHERE i.id_alumno = $1
+         AND i.id_taller = $2
+         AND i.estado NOT IN ('Anulado', 'Cancelado')
+       LIMIT 1`,
+      [idAlumno, idTaller]
+    );
+    return rows[0] || null;
+  }
+
   async misDiplomas(idAlumno) {
     const { rows: metadata } = await query(
       `SELECT column_name
