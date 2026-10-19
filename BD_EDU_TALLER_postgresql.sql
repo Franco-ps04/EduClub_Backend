@@ -990,3 +990,18 @@ VALUES
 -- Los porcentajes exactos se insertan según los valores finales
 -- definidos por el proyecto. No se inventan aquí.
 -- ============================================================
+
+-- ============================================================
+-- RECUPERAR CONTRASEÑA
+-- ============================================================
+
+  CREATE TABLE codigos_recuperacion (
+    id            SERIAL PRIMARY KEY,
+    id_usuario    INT NOT NULL REFERENCES Usuario(id_usuario) ON DELETE CASCADE,
+    codigo_hash   TEXT NOT NULL,
+    expira        TIMESTAMPTZ NOT NULL,
+    intentos      INT NOT NULL DEFAULT 0,
+    usado         BOOLEAN NOT NULL DEFAULT FALSE,
+    creado        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX idx_codigos_usuario ON codigos_recuperacion (id_usuario, creado DESC);

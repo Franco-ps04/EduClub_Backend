@@ -1,7 +1,14 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const usuarioDAO = require('../dao/UsuarioDAO');
+const codigoDAO = require('../dao/codigoDAO');
+const { enviarCorreo } = require('../services/email');
 const { soloDigitos, validarEmail, validarPassword } = require('../utils/validators');
+
+const MAX_INTENTOS = 5;
+const MINUTOS_VIGENCIA = 10;
+const SEGUNDOS_ENTRE_ENVIOS = 60;
 
 function firmarToken(user) {
   return jwt.sign(
@@ -101,38 +108,126 @@ async function register(req, res) {
   }
 }
 
+// ============================================================
+// RECUPERAR CONTRASENA (3 pasos con codigo por correo)
+// ============================================================
+
+// Valida el codigo contra el ultimo registro vigente del usuario.
+// Suma un intento si no coincide. No consume el codigo.
+async function validarCodigo(user, codigo) {
+  const registro = await codigoDAO.findVigente(user.id_usuario);
+  if (!registro || new Date(registro.expira) < new Date() || registro.intentos >= MAX_INTENTOS) {
+    return { ok: false };
+  }
+  const coincide = await bcrypt.compare(String(codigo), registro.codigo_hash);
+  if (!coincide) {
+    await codigoDAO.incrementarIntentos(registro.id);
+    return { ok: false };
+  }
+  return { ok: true, registro };
+}
+
+// POST /api/auth/recuperar-contrasena/solicitar
+// Body: { email }
+async function solicitarCodigo(req, res) {
+  const email = String(req.body.email ?? '').trim().toLowerCase();
+  if (!email || !validarEmail(email)) {
+    return res.status(400).json({ message: 'Ingresa un correo valido' });
+  }
+
+  try {
+    const user = await usuarioDAO.findByEmail(email);
+
+    if (user && user.activo) {
+      const ultimo = await codigoDAO.findUltimo(user.id_usuario);
+      const muyReciente = ultimo &&
+        (Date.now() - new Date(ultimo.creado).getTime()) < SEGUNDOS_ENTRE_ENVIOS * 1000;
+
+      if (!muyReciente) {
+        const codigo = String(crypto.randomInt(100000, 1000000));
+        const hash = await bcrypt.hash(codigo, 10);
+        const expira = new Date(Date.now() + MINUTOS_VIGENCIA * 60 * 1000);
+
+        await codigoDAO.crear(user.id_usuario, hash, expira);
+        await enviarCorreo(
+          user.email,
+          'Código para recuperar tu contraseña',
+          `<p>Hola ${user.nombres},</p>
+           <p>Tu código de verificación es:</p>
+           <h2 style="letter-spacing:4px">${codigo}</h2>
+           <p>Vence en ${MINUTOS_VIGENCIA} minutos. Si no lo solicitaste, ignora este mensaje.</p>`
+        );
+      }
+    }
+
+    // Misma respuesta exista o no la cuenta (evita revelar que correos estan registrados)
+    return res.json({
+      ok: true,
+      message: 'Si el correo está registrado, enviamos un código a tu bandeja de entrada'
+    });
+  } catch (err) {
+    console.error('[solicitarCodigo]', err);
+    return res.status(500).json({ message: 'No se pudo enviar el codigo' });
+  }
+}
+
+// POST /api/auth/recuperar-contrasena/verificar
+// Body: { email, codigo }
+async function verificarCodigo(req, res) {
+  const email = String(req.body.email ?? '').trim().toLowerCase();
+  const codigo = soloDigitos(req.body.codigo);
+
+  if (!email || codigo.length !== 6) {
+    return res.status(400).json({ message: 'Datos invalidos' });
+  }
+
+  try {
+    const user = await usuarioDAO.findByEmail(email);
+    const { ok } = user ? await validarCodigo(user, codigo) : { ok: false };
+    if (!ok) return res.status(400).json({ message: 'Codigo incorrecto o vencido' });
+
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[verificarCodigo]', err);
+    return res.status(500).json({ message: 'No se pudo verificar el codigo' });
+  }
+}
+
 // POST /api/auth/recuperar-contrasena
-// Body: { email, telefono, nuevaContrasena }
+// Body: { email, codigo, nuevaContrasena }
 async function recuperarContrasena(req, res) {
   const email = String(req.body.email ?? '').trim().toLowerCase();
-  const telefono = soloDigitos(req.body.telefono);
+  const codigo = soloDigitos(req.body.codigo);
   const nuevaContrasena = String(req.body.nuevaContrasena ?? '');
 
   if (!email || !validarEmail(email)) {
     return res.status(400).json({ message: 'Ingresa un correo valido' });
   }
-  if (!telefono || telefono.length !== 9) {
-    return res.status(400).json({ message: 'Ingresa un telefono valido de 9 digitos' });
+  if (codigo.length !== 6) {
+    return res.status(400).json({ message: 'Codigo invalido' });
   }
   if (!nuevaContrasena || !validarPassword(nuevaContrasena)) {
     return res.status(400).json({ message: 'La nueva contrasena debe tener al menos 8 caracteres, una letra y un numero' });
   }
 
   try {
-    const user = await usuarioDAO.findByEmailAndTelefono(email, telefono);
-    if (!user) {
-      return res.status(404).json({ message: 'No encontramos una cuenta con esos datos' });
+    const user = await usuarioDAO.findByEmail(email);
+    if (!user || !user.activo) {
+      return res.status(400).json({ message: 'Codigo incorrecto o vencido' });
     }
-    if (!user.activo) {
-      return res.status(403).json({ message: 'La cuenta esta suspendida' });
-    }
+
+    // Se revalida el codigo aqui: no basta con que el front haya pasado el paso 2
+    const { ok, registro } = await validarCodigo(user, codigo);
+    if (!ok) return res.status(400).json({ message: 'Codigo incorrecto o vencido' });
 
     const hash = await bcrypt.hash(nuevaContrasena, 10);
     await usuarioDAO.actualizarPassword(user.id_usuario, hash);
+    await codigoDAO.marcarUsado(registro.id); // un solo uso
 
     return res.json({ ok: true, message: 'Contrasena actualizada correctamente' });
   } catch (err) {
-    return res.status(500).json({ message: err.message || 'No se pudo actualizar la contrasena' });
+    console.error('[recuperarContrasena]', err);
+    return res.status(500).json({ message: 'No se pudo actualizar la contrasena' });
   }
 }
 
@@ -141,4 +236,11 @@ function me(req, res) {
   res.json(req.usuario);
 }
 
-module.exports = { login, register, recuperarContrasena, me };
+module.exports = {
+  login,
+  register,
+  solicitarCodigo,
+  verificarCodigo,
+  recuperarContrasena,
+  me
+};
