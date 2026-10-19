@@ -1,0 +1,26 @@
+Actividad,Semana_inicio,Semana_fin,Periodo_aproximado
+Identificación de la problemática,S1,S1,10/08/2026-16/08/2026
+Justificación y definición de la solución,S2,S3,17/08/2026-30/08/2026
+Definición de objetivos,S2,S3,17/08/2026-30/08/2026
+Investigación y marco teórico,S3,S4,24/08/2026-06/09/2026
+Definición de requerimientos,S3,S4,24/08/2026-06/09/2026
+Diseño de interfaces y prototipo Figma,S4,S6,31/08/2026-20/09/2026
+Diseño y modelado de base de datos,S5,S6,07/09/2026-20/09/2026
+Primer avance,S7,S7,21/09/2026-27/09/2026
+Desarrollo del frontend,S7,S10,21/09/2026-18/10/2026
+Desarrollo del backend y API,S10,S12,12/10/2026-01/11/2026
+Implementación de autenticación y roles,S10,S11,12/10/2026-25/10/2026
+"Implementación de talleres, inscripciones y filtros",S11,S12,19/10/2026-01/11/2026
+Segundo avance,S13,S13,02/11/2026-08/11/2026
+Implementación de asistencia por sesión,S13,S15,02/11/2026-22/11/2026
+Integración del mapa interactivo (backend),S14,S15,09/11/2026-22/11/2026
+"Implementación de notificaciones, mensajes y contacto",S14,S16,09/11/2026-29/11/2026
+"Implementación de diplomas, insignias y reconocimientos",S15,S16,16/11/2026-29/11/2026
+Tercer avance,S17,S17,30/11/2026-01/12/2026
+Pruebas e integración general,S16,S17,23/11/2026-01/12/2026
+Corrección de errores y mejoras,S16,S17,23/11/2026-01/12/2026
+Documentación final,S17,S17,30/11/2026-01/12/2026
+Despliegue y preparación de entrega,S17,S17,30/11/2026-01/12/2026
+Entrega final,S17,S17,01/12/2026-01/12/2026
+
+

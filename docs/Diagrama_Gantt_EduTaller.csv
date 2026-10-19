@@ -1,0 +1,25 @@
+Actividad,S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11,S12,S13,S14,S15,S16,S17
+Identificación de la problemática,X,,,,,,,,,,,,,,,,
+Justificación y definición de la solución,X,X,,,,,,,,,,,,,,,
+Definición de objetivos,,X,X,,,,,,,,,,,,,,
+Investigación y marco teórico,,X,X,,,,,,,,,,,,,,
+Definición de requerimientos,,X,X,,,,,,,,,,,,,,
+Diseño de interfaces y prototipo Figma,,,X,X,X,,,,,,,,,,,,
+Diseño y modelado de base de datos,,,,X,X,,,,,,,,,,,,
+Primer avance,,,,,,X,,,,,,,,,,,
+Desarrollo del frontend,,,,,,X,X,X,X,,,,,,,,
+Desarrollo del backend y API,,,,,,,,X,X,X,,,,,,,
+Implementación de autenticación y roles,,,,,,,,X,X,,,,,,,,
+"Implementación de talleres, inscripciones y filtros",,,,,,,,,X,X,,,,,,,
+Segundo avance,,,,,,,,,,,X,,,,,,
+Implementación de asistencia por sesión,,,,,,,,,,,X,X,X,,,,
+Integración del mapa interactivo (backend),,,,,,,,,,,,X,X,,,,
+"Implementación de notificaciones, mensajes y contacto",,,,,,,,,,,,X,X,X,,,
+"Implementación de diplomas, insignias y reconocimientos",,,,,,,,,,,,,X,X,,,
+Tercer avance,,,,,,,,,,,,,,,X,,
+Pruebas e integración general,,,,,,,,,,,,,,,X,X,
+Corrección de errores y mejoras,,,,,,,,,,,,,,,X,X,
+Documentación final,,,,,,,,,,,,,,,,X,X
+Despliegue y preparación de entrega,,,,,,,,,,,,,,,,X,X
+Entrega final,,,,,,,,,,,,,,,,,X
+
