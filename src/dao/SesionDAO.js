@@ -2,18 +2,26 @@ const { query } = require('../config/db');
 
 const DIAS_SEMANA = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
+function fechaUtc(fecha) {
+  if (fecha instanceof Date) {
+    return new Date(Date.UTC(fecha.getUTCFullYear(), fecha.getUTCMonth(), fecha.getUTCDate()));
+  }
+  const [anio, mes, dia] = String(fecha ?? '').slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(anio, mes - 1, dia));
+}
+
 function nombreDia(fecha) {
-  // fecha: Date o 'YYYY-MM-DD'
-  const d = fecha instanceof Date ? fecha : new Date(`${fecha}T00:00:00`);
-  return DIAS_SEMANA[d.getDay()];
+  // Las fechas DATE se manejan como calendario (UTC) para que el huso horario
+  // del servidor no cambie el día seleccionado por el usuario.
+  return DIAS_SEMANA[fechaUtc(fecha).getUTCDay()];
 }
 
 /** Siguiente fecha (incluyendo la propia fechaBase) cuyo dia de semana sea diaObjetivo. */
 function siguienteFechaConDia(fechaBase, diaObjetivo) {
   const idxObjetivo = DIAS_SEMANA.indexOf(diaObjetivo);
-  const base = new Date(`${fechaBase}T00:00:00`);
-  const diff = (idxObjetivo - base.getDay() + 7) % 7;
-  base.setDate(base.getDate() + diff);
+  const base = fechaUtc(fechaBase);
+  const diff = (idxObjetivo - base.getUTCDay() + 7) % 7;
+  base.setUTCDate(base.getUTCDate() + diff);
   return base.toISOString().slice(0, 10);
 }
 
@@ -26,8 +34,8 @@ function sumarMinutos(hora, minutos) {
 }
 
 function sumarDias(fechaIso, dias) {
-  const d = new Date(`${fechaIso}T00:00:00`);
-  d.setDate(d.getDate() + dias);
+  const d = fechaUtc(fechaIso);
+  d.setUTCDate(d.getUTCDate() + dias);
   return d.toISOString().slice(0, 10);
 }
 

@@ -39,6 +39,22 @@ class InscripcionDAO {
     return rows;
   }
 
+  /** Verifica que la inscripción activa corresponda al taller de la sesión. */
+  async perteneceASesion(idInscripcion, idSesion) {
+    const { rows } = await query(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM Inscripcion i
+         INNER JOIN Sesion s ON s.id_taller = i.id_taller
+         WHERE i.id_inscripcion = $1
+           AND s.id_sesion = $2
+           AND i.estado NOT IN ('Anulado', 'Cancelado')
+       ) AS pertenece`,
+      [idInscripcion, idSesion]
+    );
+    return rows[0]?.pertenece === true;
+  }
+
   /** Al suspender un alumno: anula sus inscripciones activas sin borrar el historial. */
   async anularActivasPorAlumno(idAlumno) {
     await query(

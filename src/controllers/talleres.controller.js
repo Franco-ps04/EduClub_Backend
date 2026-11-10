@@ -6,20 +6,36 @@ const { subirImagenTaller, crearUrlFirmadaTaller } = require('../config/supabase
 const { validarDatosTaller, parseRequisitos } = require('../utils/tallerHelpers');
 const { estadoKey } = require('../utils/validators');
 
-/**
- * Valida la cantidad de dias segun el tipo de evento y devuelve el mensaje
- * de error (o null si esta bien). 'Seminario' no usa dias (se ignoran);
- * 'Sesión' exige entre 1 y 3.
- */
-async function validarDiasSegunTipo(idTipo, dias) {
+const DIAS_SEMANA_ORDENADOS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+function obtenerDiaSemana(fechaIso) {
+  const [anio, mes, dia] = String(fechaIso ?? '').slice(0, 10).split('-').map(Number);
+  if (!anio || !mes || !dia) return null;
+  return DIAS_SEMANA_ORDENADOS[new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay()] ?? null;
+}
+
+async function validarDiasSegunTipo(idTipo, dias, fechaTaller) {
   const tipo = await tipoDAO.findTipoEventoById(idTipo);
   const esSeminario = (tipo?.nombre ?? '').toLowerCase().startsWith('semin');
-  if (esSeminario) return { esSeminario, error: null };
+  if (esSeminario) return { esSeminario, dias: [], error: null };
 
-  if (!dias || dias.length < 1 || dias.length > 3) {
-    return { esSeminario, error: 'Selecciona entre 1 y 3 días de la semana para un taller de tipo Sesión.' };
+  const diaInicio = obtenerDiaSemana(fechaTaller);
+  if (!diaInicio) {
+    return { esSeminario, dias: [], error: 'Selecciona una fecha inicial válida.' };
   }
-  return { esSeminario, error: null };
+
+  const diasElegidos = Array.isArray(dias) ? dias : [];
+  const diasNormalizados = [...new Set([diaInicio, ...diasElegidos])];
+  if (diasNormalizados.some(dia => !DIAS_SEMANA_ORDENADOS.includes(dia))) {
+    return { esSeminario, dias: [], error: 'Uno de los días seleccionados no es válido.' };
+  }
+  if (diasNormalizados.length > 3) {
+    return {
+      esSeminario, dias: [],
+      error: `El día ${diaInicio} correspondiente a la fecha inicial se selecciona automáticamente. Puedes elegir como máximo otros dos días.`
+    };
+  }
+  return { esSeminario, dias: diasNormalizados, error: null };
 }
 
 async function conRequisitos(talleres) {
@@ -164,7 +180,7 @@ async function crear(req, res) {
     const { errores, datos } = validarDatosTaller(req.body);
     if (errores.length) return res.status(400).json({ message: errores[0], errores });
 
-    const { esSeminario, error: errorDias } = await validarDiasSegunTipo(datos.idTipo, datos.dias);
+    const { esSeminario, dias: diasNormalizados, error: errorDias } = await validarDiasSegunTipo(datos.idTipo, datos.dias, datos.fecha);
     if (errorDias) return res.status(400).json({ message: errorDias });
 
     const idDocente = await resolverIdDocente(req);
@@ -184,7 +200,7 @@ async function crear(req, res) {
     // Genera automaticamente las sesiones: 1 para Seminario, 1 por cada
     // dia elegido (1 a 3) para Sesión. Ver SesionDAO.generarParaTaller.
     await sesionDAO.generarParaTaller({
-      idTaller, esSeminario, fechaTaller: datos.fecha, horaTaller: datos.hora, dias: datos.dias
+      idTaller, esSeminario, fechaTaller: datos.fecha, horaTaller: datos.hora, dias: diasNormalizados
     });
 
     const taller = await tallerDAO.findByIdCompleto(idTaller);
@@ -220,7 +236,7 @@ async function actualizar(req, res) {
     const { errores, datos } = validarDatosTaller(req.body);
     if (errores.length) return res.status(400).json({ message: errores[0], errores });
 
-    const { esSeminario, error: errorDias } = await validarDiasSegunTipo(datos.idTipo, datos.dias);
+    const { esSeminario, dias: diasNormalizados, error: errorDias } = await validarDiasSegunTipo(datos.idTipo, datos.dias, datos.fecha);
     if (errorDias) return res.status(400).json({ message: errorDias });
 
     const idDocente = await resolverIdDocente(req);
@@ -248,7 +264,7 @@ async function actualizar(req, res) {
     if (!yaTieneAsistencias) {
       await sesionDAO.eliminarPorTaller(idTaller);
       await sesionDAO.generarParaTaller({
-        idTaller, esSeminario, fechaTaller: datos.fecha, horaTaller: datos.hora, dias: datos.dias
+        idTaller, esSeminario, fechaTaller: datos.fecha, horaTaller: datos.hora, dias: diasNormalizados
       });
     } else {
       sesionesRegeneradas = false;

@@ -3,9 +3,27 @@ const sesionDAO = require('../dao/SesionDAO');
 const asistenciaDAO = require('../dao/AsistenciaDAO');
 const notificacionDAO = require('../dao/NotificacionDAO');
 const inscripcionDAO = require('../dao/InscripcionDAO');
+const usuarioDAO = require('../dao/UsuarioDAO');
 const { crearUrlFirmadaTaller } = require('../config/supabaseStorage');
 
 const ESTADOS_TERMINALES = ['Finalizado', 'Cancelado'];
+
+async function obtenerTallerPermitido(req, idTaller) {
+  const taller = await tallerDAO.findByIdCompleto(idTaller);
+  if (!taller) {
+    const error = new Error('Taller no encontrado.');
+    error.status = 404;
+    throw error;
+  }
+
+  if (req.usuario.rol === 'docente' && Number(taller.id_usuario_docente) !== Number(req.usuario.id)) {
+    const error = new Error('Solo puedes gestionar las inscripciones de los talleres que creaste.');
+    error.status = 403;
+    throw error;
+  }
+
+  return taller;
+}
 
 
 // GET /api/inscripcion/mis (alumno)
@@ -58,12 +76,21 @@ async function cancelarInscripcionAlumno(req, res) {
 }
 
 // GET /api/inscripcion/talleres
-// Lista compartida (administrador y docente ven todos los talleres, igual
-// que en la seccion Talleres) con el conteo de inscritos de cada uno.
+// Administrador ve todos los talleres; Docente solo los que creó.
 async function listarTalleres(req, res) {
   try {
     const { buscar } = req.query;
-    const talleres = await tallerDAO.listar({ buscar });
+    let idDocente;
+
+    if (req.usuario.rol === 'docente') {
+      const docente = await usuarioDAO.findDocenteByUsuarioId(req.usuario.id);
+      if (!docente) {
+        return res.status(403).json({ message: 'No tienes un perfil de docente asociado.' });
+      }
+      idDocente = docente.id_docente;
+    }
+
+    const talleres = await tallerDAO.listar({ buscar, idDocente });
 
     const conSesiones = await Promise.all(talleres.map(async (t) => ({
       id_taller: t.id_taller,
@@ -80,7 +107,7 @@ async function listarTalleres(req, res) {
 
     res.json(conSesiones);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message || 'No se pudieron cargar las inscripciones.' });
   }
 }
 
@@ -88,10 +115,15 @@ async function listarTalleres(req, res) {
 // Solo para talleres con mas de 1 sesion (tipo Sesión).
 async function resumenTaller(req, res) {
   try {
-    const data = await asistenciaDAO.resumenPorTaller(Number(req.params.idTaller));
+    const idTaller = Number(req.params.idTaller);
+    if (!Number.isInteger(idTaller) || idTaller < 1) {
+      return res.status(400).json({ message: 'El taller indicado no es válido.' });
+    }
+    await obtenerTallerPermitido(req, idTaller);
+    const data = await asistenciaDAO.resumenPorTaller(idTaller);
     res.json(data);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message || 'No se pudo cargar el resumen.' });
   }
 }
 
@@ -102,13 +134,17 @@ async function resumenTaller(req, res) {
 async function listarPorSesion(req, res) {
   try {
     const idSesion = Number(req.params.idSesion);
+    if (!Number.isInteger(idSesion) || idSesion < 1) {
+      return res.status(400).json({ message: 'La sesión indicada no es válida.' });
+    }
     const sesion = await asistenciaDAO.findSesionConTaller(idSesion);
-    if (!sesion) return res.status(404).json({ message: 'Sesión no encontrada' });
+    if (!sesion) return res.status(404).json({ message: 'Sesión no encontrada.' });
 
+    await obtenerTallerPermitido(req, sesion.id_taller);
     const alumnos = await asistenciaDAO.porSesion(idSesion);
     res.json({ sesion, alumnos });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message || 'No se pudo cargar la asistencia.' });
   }
 }
 
@@ -127,12 +163,21 @@ async function registrarAsistencia(req, res) {
       return res.status(400).json({ message: 'asistio debe ser true o false' });
     }
 
+    const sesion = await asistenciaDAO.findSesionConTaller(idSesion);
+    if (!sesion) return res.status(404).json({ message: 'Sesión no encontrada.' });
+    await obtenerTallerPermitido(req, sesion.id_taller);
+
+    const pertenece = await inscripcionDAO.perteneceASesion(idInscripcion, idSesion);
+    if (!pertenece) {
+      return res.status(400).json({ message: 'La inscripción no pertenece a esta sesión o ya no está activa.' });
+    }
+
     // El trigger fn_procesar_asistencia de la BD se encarga de emitir
     // diplomas/reconocimientos automaticamente cuando corresponde.
     await asistenciaDAO.registrar(idInscripcion, idSesion, asistio);
     res.json({ ok: true });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message || 'No se pudo registrar la asistencia.' });
   }
 }
 
@@ -152,8 +197,7 @@ async function crearNotificacion(req, res) {
     if (!mensaje) return res.status(400).json({ message: 'El mensaje es obligatorio.' });
     if (mensaje.length > 5000) return res.status(400).json({ message: 'El mensaje es demasiado largo.' });
 
-    const taller = await tallerDAO.findById(idTaller);
-    if (!taller) return res.status(404).json({ message: 'Taller no encontrado' });
+    const taller = await obtenerTallerPermitido(req, idTaller);
     if (ESTADOS_TERMINALES.includes(taller.estado)) {
       return res.status(400).json({ message: 'No puedes enviar notificaciones a talleres finalizados o cancelados.' });
     }
@@ -163,7 +207,7 @@ async function crearNotificacion(req, res) {
     });
     res.status(201).json({ id: idNotificacion });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    res.status(err.status || 500).json({ message: err.message || 'No se pudo crear la notificación.' });
   }
 }
 
