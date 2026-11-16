@@ -150,6 +150,36 @@ async function actualizarMiPerfil(req, res) {
   }
 }
 
+// PATCH /api/usuarios/mi-perfil/contrasena
+async function cambiarMiContrasena(req, res) {
+  const contrasenaActual = String(req.body.contrasenaActual ?? '');
+  const nuevaContrasena = String(req.body.nuevaContrasena ?? '');
+
+  if (!contrasenaActual) {
+    return res.status(400).json({ message: 'Ingresa tu contraseña actual.' });
+  }
+  if (!validarPassword(nuevaContrasena)) {
+    return res.status(400).json({ message: 'La nueva contraseña debe tener al menos 8 caracteres, una letra y un número.' });
+  }
+
+  try {
+    const hashActual = await usuarioDAO.findPasswordById(req.usuario.id);
+    if (!hashActual) return res.status(404).json({ message: 'No se encontró el usuario.' });
+
+    const coincide = await bcrypt.compare(contrasenaActual, hashActual);
+    if (!coincide) return res.status(400).json({ message: 'La contraseña actual es incorrecta.' });
+    if (await bcrypt.compare(nuevaContrasena, hashActual)) {
+      return res.status(400).json({ message: 'La nueva contraseña debe ser diferente a la actual.' });
+    }
+
+    const hashNuevo = await bcrypt.hash(nuevaContrasena, 10);
+    await usuarioDAO.actualizarPassword(req.usuario.id, hashNuevo);
+    res.json({ ok: true, message: 'Contraseña actualizada correctamente.' });
+  } catch (err) {
+    res.status(500).json({ message: 'No se pudo actualizar la contraseña.' });
+  }
+}
+
 // GET /api/usuarios/exportar?formato=xlsx|pdf&id=&rol=&buscar=
 async function exportar(req, res) {
   const formato = String(req.query.formato ?? '').toLowerCase();
@@ -191,4 +221,7 @@ async function exportar(req, res) {
   }
 }
 
-module.exports = { listar, obtener, crearDocente, actualizar, cambiarEstado, exportar, obtenerMiPerfil, actualizarMiPerfil };
+module.exports = {
+  listar, obtener, crearDocente, actualizar, cambiarEstado, exportar,
+  obtenerMiPerfil, actualizarMiPerfil, cambiarMiContrasena
+};

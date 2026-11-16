@@ -78,6 +78,14 @@ class UsuarioDAO extends BaseDAO {
     return rows[0] || null;
   }
 
+  async findPasswordById(id) {
+    const { rows } = await query(
+      'SELECT contrasena FROM Usuario WHERE id_usuario = $1',
+      [id]
+    );
+    return rows[0]?.contrasena || null;
+  }
+
   async crearUsuario({ nombres, email, hash, telefono, rol = 'alumno' }) {
     const { rows } = await query(
       `INSERT INTO Usuario (nombres, email, contrasena, telefono, rol)

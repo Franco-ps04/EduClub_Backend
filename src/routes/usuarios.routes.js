@@ -9,6 +9,7 @@ const usuariosAutenticados = soloRoles('alumno', 'docente', 'administrador');
 // Perfil propio: debe declararse antes de /:id para no tratarlo como un ID.
 router.get('/mi-perfil', auth, usuariosAutenticados, usuariosController.obtenerMiPerfil);
 router.patch('/mi-perfil', auth, usuariosAutenticados, usuariosController.actualizarMiPerfil);
+router.patch('/mi-perfil/contrasena', auth, usuariosAutenticados, usuariosController.cambiarMiContrasena);
 
 router.get('/', auth, soloAdmin, usuariosController.listar);
 router.get('/exportar', auth, soloAdmin, usuariosController.exportar); // antes de "/:id"
